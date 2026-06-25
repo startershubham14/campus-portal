@@ -25,7 +25,8 @@ function TopBar() {
     <>
       <div
         id="top-bar"
-        className="flex justify-between items-center w-full px-6 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-green-600"
+        className="flex justify-between items-center w-full px-6 py-2 bg-gray-50 
+        border-b border-gray-200 text-xs font-medium text-green-600"
       >
         <div>
           <a
@@ -43,12 +44,13 @@ function TopBar() {
           >
             Helpline
           </a>
-          <a
-            href="#"
-            className="bg-green-500 text-white px-3 py-1.5 rounded-md hover:bg-green-600 transition-colors duration-200"
+          <Link
+            to="/login"
+            className="bg-green-500 text-white px-3 py-1.5 rounded-md hover:bg-green-600 
+            transition-colors duration-200"
           >
-            Apply Now
-          </a>
+            Portal Login
+          </Link>
         </div>
       </div>
     </>
@@ -105,7 +107,12 @@ function NavBar() {
 }
 
 function HeroSection() {
-  const slides = [carousol_image1, carousol_image2, carousol_image3,carousol_image4];
+  const  slides = [
+    carousol_image1,
+    carousol_image2,
+    carousol_image3,
+    carousol_image4,
+  ];
 
   return (
     <>
@@ -139,7 +146,7 @@ function Carousel({ slides }) {
         }}
       >
         {slides.map((s) => {
-          return <img className='min-w-full' src={s} />;
+          return <img className="min-w-full" src={s} />;
         })}
       </div>
 
