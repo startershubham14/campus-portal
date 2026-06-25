@@ -7,7 +7,9 @@ from app.database.models import User, StudentProfile, FacultyProfile
 from app.auth.schemas import UserLogin, UserRegister, TokenResponse
 from app.auth.security import get_password_hash, verify_password, create_access_token
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
+# Depends() this is fastapi function which call another function(callback)
+#diffrence is fastapi calls it for you. for eg. below ir calls the function get_db
+#it is a method to get seperate session for database for each user session when required
 @router.post("/register")
 async def register_user(user_data: UserRegister, db: AsyncSession = Depends(get_db)):
     # 1. Check if user already exists

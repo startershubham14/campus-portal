@@ -4,7 +4,7 @@ from sqlalchemy.orm import declarative_base
 from app.config import settings
 
 # 1. Create the async engine
-# echo=True prints out all the generated SQL in your terminal (great for debugging!)
+# echo=True prints out all the generated SQL in your terminal (for debugging!) later turn to false
 engine = create_async_engine(settings.DATABASE_URL, echo=True)
 
 # 2. Create the async session factory

@@ -1,12 +1,12 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
-# What we expect from the frontend when logging in
+# What is expected from the frontend when logging in
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-# What we expect from the frontend when registering a test user
+# registering a test user
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
@@ -17,7 +17,7 @@ class UserRegister(BaseModel):
     enrollment_no: Optional[str] = None
     employee_id: Optional[str] = None
 
-# What we send BACK to the frontend upon successful login
+# for returning jwt token on successful login
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
