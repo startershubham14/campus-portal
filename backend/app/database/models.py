@@ -16,10 +16,18 @@ faculty_class_association = Table(
     Column("faculty_id", Integer, ForeignKey("faculty_profiles.id", ondelete="CASCADE"), primary_key=True),
     Column("class_id", Integer, ForeignKey("class_groups.id", ondelete="CASCADE"), primary_key=True)
 )
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=False)
+    role = Column(String, nullable=False) # 'admin', 'faculty', 'student'
+    is_active = Column(Boolean, default=True)
 
     # Relationships map the User to their specific profile
-student_profile = relationship("StudentProfile", uselist=False, back_populates="user")
-faculty_profile = relationship("FacultyProfile", uselist=False, back_populates="user")
+    student_profile = relationship("StudentProfile", uselist=False, back_populates="user")
+    faculty_profile = relationship("FacultyProfile", uselist=False, back_populates="user")
 
 # user profiles 
 class StudentProfile(Base):
