@@ -1,22 +1,27 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float, Boolean, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float, Boolean, Text, Table, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from app.database.connection import Base
 
-#  Authentication & core user 
-class User(Base):
-    __tablename__ = "users"
+student_class_association = Table(
+    "student_classes",
+    Base.metadata,
+    Column("student_id", Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"), primary_key=True),
+    Column("class_id", Integer, ForeignKey("class_groups.id", ondelete="CASCADE"), primary_key=True)
+)
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, nullable=False, index=True)
-    hashed_password = Column(String, nullable=False)
-    role = Column(String, nullable=False) # 'admin', 'faculty', 'student'
-    is_active = Column(Boolean, default=True)
+faculty_class_association = Table(
+    "faculty_classes",
+    Base.metadata,
+    Column("faculty_id", Integer, ForeignKey("faculty_profiles.id", ondelete="CASCADE"), primary_key=True),
+    Column("class_id", Integer, ForeignKey("class_groups.id", ondelete="CASCADE"), primary_key=True)
+)
 
     # Relationships map the User to their specific profile
-    student_profile = relationship("StudentProfile", uselist=False, back_populates="user")
-    faculty_profile = relationship("FacultyProfile", uselist=False, back_populates="user")
+student_profile = relationship("StudentProfile", uselist=False, back_populates="user")
+faculty_profile = relationship("FacultyProfile", uselist=False, back_populates="user")
 
-#  User profiles for student and faculties
+# user profiles 
 class StudentProfile(Base):
     __tablename__ = "student_profiles"
 
@@ -30,6 +35,8 @@ class StudentProfile(Base):
     user = relationship("User", back_populates="student_profile")
     attendance = relationship("Attendance", back_populates="student")
     grades = relationship("Grade", back_populates="student")
+    classes = relationship("ClassGroup", secondary=student_class_association, back_populates="students")
+    submissions = relationship("Submission", back_populates="student")
 
 class FacultyProfile(Base):
     __tablename__ = "faculty_profiles"
@@ -41,8 +48,11 @@ class FacultyProfile(Base):
     department = Column(String, nullable=False)
 
     user = relationship("User", back_populates="faculty_profile")
+    classes = relationship("ClassGroup", secondary=faculty_class_association, back_populates="faculty")
+    materials = relationship("CourseMaterial", back_populates="faculty")
+    assignments = relationship("Assignment", back_populates="faculty")
 
-#  Attendence dashboard metrics 
+#  dashboard metrics 
 class Attendance(Base):
     __tablename__ = "attendance"
 
@@ -74,3 +84,58 @@ class Announcement(Base):
     content = Column(Text, nullable=False)
     target_audience = Column(String, default="all") # 'all', 'student', 'faculty'
     created_at = Column(Date, nullable=False)
+
+class ClassGroup(Base):
+    __tablename__ = "class_groups"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    department = Column(String, nullable=False)
+    semester = Column(Integer, nullable=False)
+
+    students = relationship("StudentProfile", secondary=student_class_association, back_populates="classes")
+    faculty = relationship("FacultyProfile", secondary=faculty_class_association, back_populates="classes")
+    materials = relationship("CourseMaterial", back_populates="class_group")
+    assignments = relationship("Assignment", back_populates="class_group")
+
+class CourseMaterial(Base):
+    __tablename__ = "course_materials"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    file_url = Column(String, nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
+    faculty_id = Column(Integer, ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
+
+    class_group = relationship("ClassGroup", back_populates="materials")
+    faculty = relationship("FacultyProfile", back_populates="materials")
+
+class Assignment(Base):
+    __tablename__ = "assignments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    due_date = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
+    faculty_id = Column(Integer, ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
+
+    class_group = relationship("ClassGroup", back_populates="assignments")
+    faculty = relationship("FacultyProfile", back_populates="assignments")
+    submissions = relationship("Submission", back_populates="assignment")
+
+class Submission(Base):
+    __tablename__ = "submissions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    file_url = Column(String, nullable=False)
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    marks_awarded = Column(Float, nullable=True)
+    feedback = Column(Text, nullable=True)
+    assignment_id = Column(Integer, ForeignKey("assignments.id", ondelete="CASCADE"))
+    student_id = Column(Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"))
+
+    assignment = relationship("Assignment", back_populates="submissions")
+    student = relationship("StudentProfile", back_populates="submissions")
