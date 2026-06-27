@@ -1,10 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   FaBell, FaComment, FaExpand, FaHome, FaTachometerAlt, 
   FaBook, FaCalendarAlt, FaProjectDiagram, FaBars, 
   FaEllipsisV, FaChevronDown, FaFilePdf, FaUsers 
 } from "react-icons/fa";
+import { useAuthGuard, logout } from "../hooks/Useauthguard";
+
+interface Course {
+  id: number;
+  code: string;
+  title: string;
+  color: string;
+}
 
 const MOCK_COURSES = [
   { id: 1, code: "CSC801", title: "Advanced Artificial Intelligence Div-B", color: "from-indigo-500 to-purple-600" },
@@ -24,23 +32,26 @@ const MOCK_COURSE_CONTENT = [
   { id: 6, type: "pdf", title: "5_Department Academic Calendar" },
 ];
 
+
+
 export default function StudentDashboard() {
-  const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    const role = localStorage.getItem("role");
-    if (!token || role !== "student") {
-      navigate("/login");
-    }
-  }, [navigate]);
+  // Verifies the session against the server via /auth/me.
+  // If the cookie is missing/expired or the role isn't "student", redirects to login.
+  const { user, loading } = useAuthGuard("student");
 
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("role");
-    navigate("/login");
-  };
+  const handleLogout = () => logout(navigate);
+
+  // Show nothing while the server-side check is in flight (prevents flash of content)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-slate-500 text-sm">Verifying session...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -159,7 +170,7 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: any) => v
   );
 }
 
-function CourseDetail({ course, onBack }: { course: any, onBack: () => void }) {
+function CourseDetail({ course, onBack }: { course: Course, onBack: () => void }) {
   return (
     <div className="bg-white shadow-sm border border-slate-200 rounded-xl min-h-150 overflow-hidden">
       <div className="bg-slate-50 border-b border-slate-200 p-4 text-sm flex items-center gap-2 overflow-x-auto whitespace-nowrap text-slate-500 font-medium">

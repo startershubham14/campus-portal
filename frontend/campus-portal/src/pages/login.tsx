@@ -15,12 +15,15 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/auth/login", {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
+        // "include" tells the browser to store the httpOnly cookie
+        // the server sends back. Without this, the cookie is ignored.
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -28,19 +31,22 @@ export default function Login() {
       }
 
       const data = await response.json();
-      
-      // Save token and role to localStorage for future API calls
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("role", data.role);
 
-      // Route to the appropriate dashboard based on the role!
+      // The token is now securely in an httpOnly cookie — we never touch it.
+      // We only use the role from the response body to decide where to redirect.
+      // This role is NOT stored anywhere on the client; the next verification
+      // always comes from the server via /auth/me.
       if (data.role === "student") navigate("/student");
       else if (data.role === "faculty") navigate("/faculty");
       else if (data.role === "admin") navigate("/admin");
       else navigate("/");
 
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unexpected error occurred");
+      }
     } finally {
       setLoading(false);
     }
@@ -68,7 +74,7 @@ export default function Login() {
                 {error}
               </div>
             )}
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700">Email address</label>
               <div className="mt-1">

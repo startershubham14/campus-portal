@@ -1,8 +1,7 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float, Boolean, Text, Table, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float, Boolean, Text, Table, DateTime, Enum
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from app.database.connection import Base
-
 student_class_association = Table(
     "student_classes",
     Base.metadata,
@@ -22,7 +21,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
-    role = Column(String, nullable=False) # 'admin', 'faculty', 'student'
+    role = Column(Enum("admin", "faculty", "student", name="user_role"),nullable=False)
     is_active = Column(Boolean, default=True)
 
     # Relationships map the User to their specific profile
@@ -112,7 +111,8 @@ class CourseMaterial(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     file_url = Column(String, nullable=False)
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc)
+)
     class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
     faculty_id = Column(Integer, ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
 
@@ -126,7 +126,7 @@ class Assignment(Base):
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     due_date = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
     faculty_id = Column(Integer, ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
 
@@ -139,7 +139,7 @@ class Submission(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     file_url = Column(String, nullable=False)
-    submitted_at = Column(DateTime, default=datetime.utcnow)
+    submitted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     marks_awarded = Column(Float, nullable=True)
     feedback = Column(Text, nullable=True)
     assignment_id = Column(Integer, ForeignKey("assignments.id", ondelete="CASCADE"))

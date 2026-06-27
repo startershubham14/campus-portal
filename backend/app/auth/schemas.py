@@ -17,8 +17,12 @@ class UserRegister(BaseModel):
     enrollment_no: Optional[str] = None
     employee_id: Optional[str] = None
 
-# for returning jwt token on successful login
+# The token is no longer returned in the body — it's set as an httpOnly cookie.
+# We only return the role so the frontend knows where to redirect.
 class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
+    role: str
+
+class UserMeResponse(BaseModel):
+    id: int
+    email: str
     role: str

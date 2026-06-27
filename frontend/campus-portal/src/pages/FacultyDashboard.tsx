@@ -1,12 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   FaBell, FaComment, FaExpand, FaHome, FaTachometerAlt, 
   FaBook, FaBars, FaEllipsisV, FaChevronDown, FaFilePdf, 
   FaUsers, FaPlus, FaUpload, FaCheckCircle, FaClipboardList
 } from "react-icons/fa";
+import { useAuthGuard, logout } from "../hooks/useAuthGuard";
 
-// --- MOCK DATA ---
+interface Course {
+  id: number;
+  code: string;
+  title: string;
+  color: string;
+  students: number ;
+}
+
+//
+//  MOCK DATA
 const MOCK_COURSES = [
   { id: 1, code: "CSC801", title: "Advanced Artificial Intelligence Div-B", color: "from-indigo-500 to-purple-600", students: 65 },
   { id: 2, code: "CSD08011", title: "Data Structures & Algorithms - Sem 3", color: "from-emerald-400 to-teal-600", students: 120 },
@@ -25,22 +35,20 @@ const MOCK_ASSIGNMENTS = [
 ];
 
 export default function FacultyDashboard() {
-  const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    const role = localStorage.getItem("role");
-    if (!token || role !== "faculty") {
-      navigate("/login");
-    }
-  }, [navigate]);
+  const { loading } = useAuthGuard("faculty");
 
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("role");
-    navigate("/login");
-  };
+  const handleLogout = () => logout(navigate);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-slate-500 text-sm">Verifying session...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -156,7 +164,7 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: any) => v
   );
 }
 
-function CourseDetail({ course, onBack }: { course: any, onBack: () => void }) {
+function CourseDetail({ course, onBack }: { course: Course, onBack: () => void }) {
   const [courseTab, setCourseTab] = useState("content"); // 'content', 'assignments', 'grading'
 
   return (

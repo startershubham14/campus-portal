@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   FaUsers, FaChalkboardTeacher, FaGraduationCap, 
   FaPlus, FaBuilding, FaSearch, FaSignOutAlt, FaTachometerAlt
 } from "react-icons/fa";
+import { useAuthGuard, logout } from "../hooks/useAuthGuard";
 
 // --- MOCK DATA ---
 const MOCK_STATS = { totalStudents: 1240, totalFaculty: 85, activeClasses: 42 };
@@ -24,20 +25,17 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    const role = localStorage.getItem("role");
-    // Ensure only admins can access this page
-    if (!token || role !== "admin") {
-      navigate("/login");
-    }
-  }, [navigate]);
+  const { loading } = useAuthGuard("admin");
 
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("role");
-    navigate("/login");
-  };
+  const handleLogout = () => logout(navigate);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-slate-500 text-sm">Verifying session...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans">

@@ -8,6 +8,8 @@ from app.database import models  # Importing models registers them with Base
 
 # Import the authentication router we just created
 from app.auth.router import router as auth_router
+from app.limiter import limiter
+
 
 # This context manager handles startup (creating tables) and shutdown (closing connections)
 @asynccontextmanager
@@ -37,9 +39,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["GET", "POST", "PUT", "DELETE"], # Allows all HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["Authorization", "Content-Type"], 
 )
+app.state.limiter = limiter
 
 # Register our authentication endpoints to the app
 app.include_router(auth_router)
