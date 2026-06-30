@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, Literal
 
 # What is expected from the frontend when logging in
 class UserLogin(BaseModel):
@@ -10,7 +10,7 @@ class UserLogin(BaseModel):
 class UserRegister(BaseModel):
     email: EmailStr
     password: str
-    role: str  # "admin", "faculty", or "student"
+    role: Literal["admin", "faculty", "student"]  # "admin", "faculty", or "student"
     full_name: str
     
     # Optional fields depending on the role

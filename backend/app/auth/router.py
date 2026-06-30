@@ -9,6 +9,7 @@ from app.auth.schemas import UserLogin, UserRegister, TokenResponse, UserMeRespo
 from app.auth.security import get_password_hash, verify_password, create_access_token
 from app.auth.dependencies import get_current_user
 from app.limiter import limiter
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # Depends() this is fastapi function which call another function(callback)
@@ -35,7 +36,7 @@ async def register_user(user_data: UserRegister, db: AsyncSession = Depends(get_
     if user_data.role == "student":
         profile = StudentProfile(
             user_id=new_user.id,
-            enrollment_no=user_data.enrollment_no or "TEMP-123",
+            enrollment_no=user_data.enrollment_no ,
             full_name=user_data.full_name,
             department="General"
         )
@@ -43,7 +44,7 @@ async def register_user(user_data: UserRegister, db: AsyncSession = Depends(get_
     elif user_data.role == "faculty":
         profile = FacultyProfile(
             user_id=new_user.id,
-            employee_id=user_data.employee_id or "EMP-123",
+            employee_id=user_data.employee_id ,
             full_name=user_data.full_name,
             department="General"
         )

@@ -10,7 +10,7 @@ interface AuthUser {
 /**
  * Calls /auth/me on mount to verify the session server-side.
  *
- * The browser automatically sends the httpOnly cookie — no localStorage involved.
+ * The browser automatically sends the httpOnly cookie 
  * If the cookie is missing, expired, or the role doesn't match, the user is
  * redirected to /login. The backend is the single source of truth for auth.
  *
@@ -55,7 +55,7 @@ export function useAuthGuard(requiredRole: string) {
     };
 
     verifyAuth();
-  }, [navigate, requiredRole]);
+  }, [navigate, requiredRole]);//depended states
 
   return { user, loading };
 }

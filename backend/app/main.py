@@ -10,6 +10,9 @@ from app.database import models  # Importing models registers them with Base
 from app.auth.router import router as auth_router
 from app.limiter import limiter
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # This context manager handles startup (creating tables) and shutdown (closing connections)
 @asynccontextmanager
@@ -42,6 +45,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"], # Allows all HTTP methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["Authorization", "Content-Type"], 
 )
+app.add_middleware(SlowAPIMiddleware)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.state.limiter = limiter
 
 # Register our authentication endpoints to the app
