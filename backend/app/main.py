@@ -1,28 +1,21 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-# Import database dependencies to create tables on startup
 from app.database.connection import engine, Base
-from app.database import models  # Importing models registers them with Base
-
-# Import the authentication router we just created
+from app.database import models  
 from app.auth.router import router as auth_router
+from app.routers.admin import router as admin_router
 from app.limiter import limiter
-
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-# This context manager handles startup (creating tables) and shutdown (closing connections)
+# Alembic manages the schema.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Create tables if they don't exist
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
     yield
-    # Shutdown: Dispose of the database engine safely
     await engine.dispose()
+
 
 # Initialize the FastAPI app with the lifespan event
 app = FastAPI(
@@ -51,6 +44,7 @@ app.state.limiter = limiter
 
 # Register our authentication endpoints to the app
 app.include_router(auth_router)
+app.include_router(admin_router)
 
 # A simple root endpoint to verify the server is running
 @app.get("/")

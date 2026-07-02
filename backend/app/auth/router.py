@@ -4,54 +4,19 @@ from sqlalchemy.future import select
 
 from app.config import settings
 from app.database.connection import get_db
-from app.database.models import User, StudentProfile, FacultyProfile
-from app.auth.schemas import UserLogin, UserRegister, TokenResponse, UserMeResponse
-from app.auth.security import get_password_hash, verify_password, create_access_token
+from app.database.models import User
+from app.auth.schemas import UserLogin, TokenResponse, UserMeResponse
+from app.auth.security import verify_password, create_access_token
 from app.auth.dependencies import get_current_user
 from app.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# Depends() this is fastapi function which call another function(callback)
-#diffrence is fastapi calls it for you. for eg. below ir calls the function get_db
-#it is a method to get seperate session for database for each user session when required
-
-@router.post("/register")
-async def register_user(user_data: UserRegister, db: AsyncSession = Depends(get_db)):
-    # 1. Check if user already exists
-    result = await db.execute(select(User).where(User.email == user_data.email))
-    if result.scalars().first():
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    # 2. Create Base User
-    new_user = User(
-        email=user_data.email,
-        hashed_password=get_password_hash(user_data.password),
-        role=user_data.role
-    )
-    db.add(new_user)
-    await db.flush()
-
-    # 3. Create Role-Specific Profile
-    if user_data.role == "student":
-        profile = StudentProfile(
-            user_id=new_user.id,
-            enrollment_no=user_data.enrollment_no ,
-            full_name=user_data.full_name,
-            department="General"
-        )
-        db.add(profile)
-    elif user_data.role == "faculty":
-        profile = FacultyProfile(
-            user_id=new_user.id,
-            employee_id=user_data.employee_id ,
-            full_name=user_data.full_name,
-            department="General"
-        )
-        db.add(profile)
-
-    await db.commit()
-    return {"message": f"Successfully created {user_data.role} account!"}
+# NOTE: There is no public POST /auth/register endpoint.
+# Account creation (student, faculty, AND admin) only happens through
+# POST /admin/users, which requires an authenticated admin (see
+# app/routers/admin.py). The very first admin is created via the
+# one-time bootstrap script: app/scripts/create_first_admin.py
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("10/minute")

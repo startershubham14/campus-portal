@@ -1,3 +1,4 @@
+import uuid
 from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -27,10 +28,21 @@ async def get_current_user(
 
     # Decode and validate the JWT (raises 401 on failure)
     payload = verify_access_token(access_token)
-    user_id: str = payload.get("sub")
+    user_id_raw: str = payload.get("sub")
+
+    # The "sub" claim is now a UUID string (e.g. from str(user.id)).
+    # Parsing can fail if the token is malformed or from an old format —
+    # treat that the same as an invalid token rather than crashing with 500.
+    try:
+        user_id = uuid.UUID(user_id_raw)
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token subject"
+        )
 
     # Fetch the real user from DB — don't trust the payload alone
-    result = await db.execute(select(User).where(User.id == int(user_id)))
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
 
     if user is None or not user.is_active:

@@ -1,39 +1,45 @@
+import uuid
 from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float, Boolean, Text, Table, DateTime, Enum
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database.connection import Base
+
 student_class_association = Table(
     "student_classes",
     Base.metadata,
-    Column("student_id", Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"), primary_key=True),
+    Column("student_id", UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"), primary_key=True),
     Column("class_id", Integer, ForeignKey("class_groups.id", ondelete="CASCADE"), primary_key=True)
 )
 
 faculty_class_association = Table(
     "faculty_classes",
     Base.metadata,
-    Column("faculty_id", Integer, ForeignKey("faculty_profiles.id", ondelete="CASCADE"), primary_key=True),
+    Column("faculty_id", UUID(as_uuid=True), ForeignKey("faculty_profiles.id", ondelete="CASCADE"), primary_key=True),
     Column("class_id", Integer, ForeignKey("class_groups.id", ondelete="CASCADE"), primary_key=True)
 )
+
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
+    # UUID primary key — prevents account enumeration via sequential IDs.
+    # default=uuid.uuid4 generates it in Python before insert; the DB
+    # column itself is PostgreSQL's native UUID type.
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
-    role = Column(Enum("admin", "faculty", "student", name="user_role"),nullable=False)
+    role = Column(Enum("admin", "faculty", "student", name="user_role"), nullable=False)
     is_active = Column(Boolean, default=True)
 
-    # Relationships map the User to their specific profile
     student_profile = relationship("StudentProfile", uselist=False, back_populates="user")
     faculty_profile = relationship("FacultyProfile", uselist=False, back_populates="user")
 
-# user profiles 
+# user profiles
 class StudentProfile(Base):
     __tablename__ = "student_profiles"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     enrollment_no = Column(String, unique=True, nullable=False)
     full_name = Column(String, nullable=False)
     department = Column(String, nullable=False)
@@ -48,8 +54,8 @@ class StudentProfile(Base):
 class FacultyProfile(Base):
     __tablename__ = "faculty_profiles"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     employee_id = Column(String, unique=True, nullable=False)
     full_name = Column(String, nullable=False)
     department = Column(String, nullable=False)
@@ -59,12 +65,14 @@ class FacultyProfile(Base):
     materials = relationship("CourseMaterial", back_populates="faculty")
     assignments = relationship("Assignment", back_populates="faculty")
 
-#  dashboard metrics 
+#  dashboard metrics  — kept as Integer PKs since they're not yet
+#  exposed via any route; convert to UUID later if you build endpoints
+#  that expose these IDs externally.
 class Attendance(Base):
     __tablename__ = "attendance"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"))
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"))
     date = Column(Date, nullable=False)
     subject = Column(String, nullable=False)
     is_present = Column(Boolean, nullable=False)
@@ -75,7 +83,7 @@ class Grade(Base):
     __tablename__ = "grades"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"))
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"))
     subject = Column(String, nullable=False)
     marks_obtained = Column(Float, nullable=False)
     total_marks = Column(Float, default=100.0)
@@ -94,7 +102,7 @@ class Announcement(Base):
 
 class ClassGroup(Base):
     __tablename__ = "class_groups"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     department = Column(String, nullable=False)
@@ -107,28 +115,27 @@ class ClassGroup(Base):
 
 class CourseMaterial(Base):
     __tablename__ = "course_materials"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     file_url = Column(String, nullable=False)
-    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc)
-)
+    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
-    faculty_id = Column(Integer, ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
+    faculty_id = Column(UUID(as_uuid=True), ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
 
     class_group = relationship("ClassGroup", back_populates="materials")
     faculty = relationship("FacultyProfile", back_populates="materials")
 
 class Assignment(Base):
     __tablename__ = "assignments"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     due_date = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
-    faculty_id = Column(Integer, ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
+    faculty_id = Column(UUID(as_uuid=True), ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
 
     class_group = relationship("ClassGroup", back_populates="assignments")
     faculty = relationship("FacultyProfile", back_populates="assignments")
@@ -136,14 +143,14 @@ class Assignment(Base):
 
 class Submission(Base):
     __tablename__ = "submissions"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     file_url = Column(String, nullable=False)
     submitted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     marks_awarded = Column(Float, nullable=True)
     feedback = Column(Text, nullable=True)
     assignment_id = Column(Integer, ForeignKey("assignments.id", ondelete="CASCADE"))
-    student_id = Column(Integer, ForeignKey("student_profiles.id", ondelete="CASCADE"))
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"))
 
     assignment = relationship("Assignment", back_populates="submissions")
     student = relationship("StudentProfile", back_populates="submissions")
