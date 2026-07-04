@@ -5,11 +5,11 @@ from app.database.connection import engine, Base
 from app.database import models  
 from app.auth.router import router as auth_router
 from app.routers.admin import router as admin_router
+from app.routers.student import router as student_router
 from app.limiter import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-
 # Alembic manages the schema.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,7 +45,7 @@ app.state.limiter = limiter
 # Register our authentication endpoints to the app
 app.include_router(auth_router)
 app.include_router(admin_router)
-
+app.include_router(student_router)
 # A simple root endpoint to verify the server is running
 @app.get("/")
 async def root():
