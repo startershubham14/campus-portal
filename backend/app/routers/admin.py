@@ -38,7 +38,7 @@ async def _generate_employee_id(db: AsyncSession) -> str:
 
 #function to compress  ( role specific profile -> dict ) for response
 def build_profile_dict( user : User) -> dict | None:
-    if user.role=="student" and user.student_profile:
+    if "student" == user.role and user.student_profile:
         p=user.student_profile
         return {
             "full_name": p.full_name,
@@ -46,7 +46,7 @@ def build_profile_dict( user : User) -> dict | None:
             "department": p.department,
             "current_semester": p.current_semester,
         }
-    if  user.role=="faciulty" and user.faculty_profile:
+    if  "faculty" == user.role and user.faculty_profile:
         p=user.faculty_profile
         return {
             "full_name": p.full_name,
@@ -86,7 +86,7 @@ async def create_user(
     await db.flush()  
     # flush is super important here to get the new user's ID before inserting the profile
 
-    if user_data.role == "student":
+    if  "student" == user_data.role:
         enrollment_no = user_data.enrollment_no or await _generate_enrollment_no(db)
         db.add(StudentProfile(
             user_id=new_user.id,
@@ -94,7 +94,7 @@ async def create_user(
             full_name=user_data.full_name,
             department="General",
         ))
-    elif user_data.role == "faculty":
+    elif  "faculty"== user_data.role:
         employee_id = user_data.employee_id or await _generate_employee_id(db)
         db.add(FacultyProfile(
             user_id=new_user.id,
@@ -159,9 +159,9 @@ async def list_users(
     # Without this SQLAlchemy would fire a separate SELECT for each user's
     # profile when we access user.student_profile / user.faculty_profile.
     
-    if role == "student":
+    if  "student" == role:
         query = query.options(selectinload(User.student_profile))
-    elif role == "faculty":
+    elif "faculty" == role:
         query = query.options(selectinload(User.faculty_profile))
 
     # Optional active filter
@@ -172,14 +172,14 @@ async def list_users(
     # so it doesn't care if they type uppercase or lowercase its gonna be lowercase for query.
     if search:
         term = f"%{search.lower()}%"
-        if role == "student":
+        if  "student" == role :
             query = query.join(User.student_profile).where(
                 User.email.ilike(term)
                 | StudentProfile.full_name.ilike(term)
                 | StudentProfile.enrollment_no.ilike(term)
                 | StudentProfile.department.ilike(term)
             )
-        elif role == "faculty":
+        elif  "faculty" == role :
             query = query.join(User.faculty_profile).where(
                 User.email.ilike(term)
                 | FacultyProfile.full_name.ilike(term)
@@ -199,7 +199,7 @@ async def list_users(
             email=u.email,
             role=u.role,
             is_active=u.is_active,
-            profile=_build_profile_dict(u),
+            profile=build_profile_dict(u),
         )
         for u in users
     ]
@@ -236,7 +236,7 @@ async def get_user(
         email=user.email,
         role=user.role,
         is_active=user.is_active,
-        profile=_build_profile_dict(user),
+        profile=build_profile_dict(user),
     )
 
 # PATCH /admin/users/{user_id} — update profile fields
@@ -276,7 +276,7 @@ async def update_user(
     # (exclude_unset=True means fields not in the JSON body are skipped)
     updates = payload.model_dump(exclude_unset=True)
 
-    if user.role == "student" and user.student_profile:
+    if "student" == user.role  and user.student_profile:
         profile = user.student_profile
         if "full_name" in updates:
             profile.full_name = updates["full_name"]
@@ -285,7 +285,7 @@ async def update_user(
         if "current_semester" in updates:
             profile.current_semester = updates["current_semester"]
 
-    elif user.role == "faculty" and user.faculty_profile:
+    elif "faculty" == user.role  and user.faculty_profile:
         profile = user.faculty_profile
         if "full_name" in updates:
             profile.full_name = updates["full_name"]

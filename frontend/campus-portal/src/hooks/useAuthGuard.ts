@@ -7,17 +7,6 @@ interface AuthUser {
   role: string;
 }
 
-/**
- * Calls /auth/me on mount to verify the session server-side.
- *
- * The browser automatically sends the httpOnly cookie 
- * If the cookie is missing, expired, or the role doesn't match, the user is
- * redirected to /login. The backend is the single source of truth for auth.
- *
- * Usage:
- *   const { user, loading } = useAuthGuard("student");
- *   if (loading) return <Spinner />;
- */
 export function useAuthGuard(requiredRole: string) {
   const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(null);
