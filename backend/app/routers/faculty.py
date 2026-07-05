@@ -161,7 +161,7 @@ async def get_course_detail(
     )
 
 
-# POST /faculty/courses/{class_id}/materials  — upload a material
+# POST /faculty/courses/{class_id}/materials  (to upload a course material like notes)
 
 @router.post("/courses/{class_id}/materials", status_code=201)
 async def upload_material(

@@ -133,8 +133,8 @@ class Assignment(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    due_date = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    due_date = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
     faculty_id = Column(UUID(as_uuid=True), ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
 

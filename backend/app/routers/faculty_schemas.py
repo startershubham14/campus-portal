@@ -1,6 +1,5 @@
-"""
-Pydantic schemas for the faculty API.
-"""
+#Pydantic schemas for the faculty API.
+
 import uuid
 from typing import Optional
 from pydantic import BaseModel
@@ -33,7 +32,7 @@ class AssignmentOut(BaseModel):
     id: int
     title: str
     description: Optional[str] = None
-    due_date: str
+    due_date: str 
     submission_count: int   # how many students have submitted
 
 
@@ -69,7 +68,7 @@ class UploadMaterialRequest(BaseModel):
 class CreateAssignmentRequest(BaseModel):
     title: str
     description: Optional[str] = None
-    due_date: str   # ISO date string e.g. "2025-12-01"
+    due_date: str   
 
 
 class GradeSubmissionRequest(BaseModel):

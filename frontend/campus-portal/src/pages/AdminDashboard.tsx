@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import {
   FaUsers, FaChalkboardTeacher, FaGraduationCap,
   FaPlus, FaBuilding, FaSearch, FaSignOutAlt, FaTachometerAlt,
-  FaToggleOn, FaToggleOff, FaSpinner, FaTimes, FaUserShield
+  FaToggleOn, FaToggleOff, FaSpinner, FaTimes, FaUserShield,
+  FaTrash, FaArrowLeft
 } from "react-icons/fa";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard"
 
@@ -36,6 +37,32 @@ interface CreateUserModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+
+interface ClassOut {
+  id: number;
+  code: string;
+  name: string;
+  department: string;
+  semester: number;
+  student_count: number;
+  faculty_count: number;
+}
+
+interface PersonInClass {
+  user_id: string;
+  full_name: string;
+  enrollment_no?: string;   // students
+  employee_id?: string;     // faculty
+  department: string;
+  current_semester?: number;
+}
+
+interface ClassDetail extends ClassOut {
+  faculty: PersonInClass[];
+  students: PersonInClass[];
+}
+
 
 type UserRole = "student" | "faculty" | "admin";
 
@@ -468,7 +495,7 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
             </select>
           </div>
 
-          {/* Conditional ID fields — shown but optional (server auto-generates) */}
+         
           {form.role === "student" && field("Enrollment No (optional)", "enrollment_no", "text", "Auto-generated if blank")}
           {form.role === "faculty" && field("Employee ID (optional)", "employee_id", "text", "Auto-generated if blank")}
         </div>
@@ -496,39 +523,387 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
 }
 
 
-const MOCK_CLASSES = [
-  { id: 1, name: "Advanced Artificial Intelligence Div-B", department: "Computer Science", semester: 8, studentsCount: 65 },
-  { id: 2, name: "Data Structures & Algorithms", department: "Computer Science", semester: 3, studentsCount: 120 },
-  { id: 3, name: "Engineering Mechanics", department: "Mechanical", semester: 1, studentsCount: 80 },
-];
+// ClassesTab — list + create + manage
 
 function ClassesTab() {
+  const [classes, setClasses] = useState<ClassOut[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<ClassOut | null>(null);
+
+  const fetchClasses = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await apiFetch<ClassOut[]>("/admin/classes");
+      setClasses(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load classes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchClasses(); }, []);
+
+  const handleDelete = async (classId: number) => {
+    if (!confirm("Delete this class? This will unenroll all students and remove all faculty assignments.")) return;
+    try {
+      await apiFetch(`/admin/classes/${classId}`, { method: "DELETE" });
+      setClasses((prev) => prev.filter((c) => c.id !== classId));
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    }
+  };
+
+  if (selectedClass) {
+    return (
+      <ClassManagePanel
+        classInfo={selectedClass}
+        onBack={() => { setSelectedClass(null); fetchClasses(); }}
+      />
+    );
+  }
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="p-6 border-b border-slate-200 flex justify-between items-center">
         <h2 className="text-lg font-bold text-slate-800">Class Groups</h2>
-        <button className="flex items-center justify-center bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
           <FaPlus className="mr-2" /> Create Class
         </button>
       </div>
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MOCK_CLASSES.map((cls) => (
-          <div key={cls.id} className="flex flex-col border border-slate-200 rounded-lg p-5 hover:shadow-md transition-shadow h-full">
-            <div className="grow">
-              <h3 className="font-bold text-slate-800 mb-2 leading-tight">{cls.name}</h3>
-              <div className="space-y-1 mb-4">
-                <p className="text-xs text-slate-500"><span className="font-semibold text-slate-700">Dept:</span> {cls.department}</p>
-                <p className="text-xs text-slate-500"><span className="font-semibold text-slate-700">Semester:</span> {cls.semester}</p>
+
+      {loading ? (
+        <div className="p-10 flex justify-center text-slate-400 text-sm gap-2">
+          <FaSpinner className="animate-spin" /> Loading...
+        </div>
+      ) : error ? (
+        <p className="p-6 text-red-500 text-sm">{error}</p>
+      ) : classes.length === 0 ? (
+        <div className="p-12 text-center text-slate-400">
+          <FaChalkboardTeacher size={36} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No classes yet. Create one to get started.</p>
+        </div>
+      ) : (
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {classes.map((cls) => (
+            <div key={cls.id} className="flex flex-col border border-slate-200 rounded-xl p-5 hover:shadow-md transition-shadow">
+              <div className="grow">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-bold text-indigo-600 font-mono">{cls.code}</span>
+                  <button
+                    onClick={() => handleDelete(cls.id)}
+                    className="text-slate-300 hover:text-rose-500 transition-colors"
+                    title="Delete class"
+                  >
+                    <FaTrash size={12} />
+                  </button>
+                </div>
+                <h3 className="font-bold text-slate-800 mb-3 leading-tight text-sm">{cls.name}</h3>
+                <div className="space-y-1 mb-4">
+                  <p className="text-xs text-slate-500">
+                    <span className="font-semibold text-slate-700">Dept:</span> {cls.department}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    <span className="font-semibold text-slate-700">Semester:</span> {cls.semester}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                <div className="flex gap-3 text-xs text-slate-500 font-medium">
+                  <span className="flex items-center gap-1"><FaUsers size={11} /> {cls.student_count}</span>
+                  <span className="flex items-center gap-1"><FaChalkboardTeacher size={11} /> {cls.faculty_count}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedClass(cls)}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                >
+                  Manage →
+                </button>
               </div>
             </div>
-            <div className="flex justify-between items-center pt-4 border-t border-slate-100 shrink-0">
-              <div className="flex items-center text-xs text-slate-500 font-medium">
-                <FaUsers className="mr-1.5" /> {cls.studentsCount} Enrolled
-              </div>
-              <button className="text-indigo-600 hover:text-indigo-800 text-xs font-bold">Manage</button>
+          ))}
+        </div>
+      )}
+
+      {showCreate && (
+        <CreateClassModal
+          onClose={() => setShowCreate(false)}
+          onSuccess={() => { setShowCreate(false); fetchClasses(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Create class 
+function CreateClassModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState({ code: "", name: "", department: "", semester: "1" });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!form.code || !form.name || !form.department) {
+      setError("All fields are required.");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      await apiFetch("/admin/classes", {
+        method: "POST",
+        body: JSON.stringify({ ...form, semester: parseInt(form.semester) }),
+      });
+      onSuccess();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create class");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800">Create New Class</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><FaTimes size={18} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {error && <p className="text-red-500 text-sm bg-red-50 border border-red-200 px-4 py-2 rounded-lg">{error}</p>}
+          {[
+            { label: "Class Code", key: "code", placeholder: "e.g. CSC801" },
+            { label: "Class Name", key: "name", placeholder: "e.g. Advanced AI Div-B" },
+            { label: "Department",  key: "department", placeholder: "e.g. Computer Science" },
+          ].map(({ label, key, placeholder }) => (
+            <div key={key}>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+              <input
+                type="text"
+                placeholder={placeholder}
+                value={form[key as keyof typeof form]}
+                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
             </div>
+          ))}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Semester</label>
+            <select
+              value={form.semester}
+              onChange={(e) => setForm((f) => ({ ...f, semester: e.target.value }))}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {[1,2,3,4,5,6,7,8].map((s) => (
+                <option key={s} value={s}>Semester {s}</option>
+              ))}
+            </select>
           </div>
+        </div>
+        <div className="flex justify-end gap-3 p-6 border-t border-slate-200">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 font-medium">Cancel</button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {submitting && <FaSpinner className="animate-spin" size={13} />}
+            {submitting ? "Creating..." : "Create Class"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Class manage panel — assign faculty, enroll students
+
+type ManageTab = "faculty" | "students";
+
+function ClassManagePanel({ classInfo, onBack }: { classInfo: ClassOut; onBack: () => void }) {
+  const [detail, setDetail] = useState<ClassDetail | null>(null);
+  const [activeTab, setActiveTab] = useState<ManageTab>("faculty");
+  const [loading, setLoading] = useState(true);
+  const [allUsers, setAllUsers] = useState<UserListItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [acting, setActing] = useState<string | null>(null);
+
+  const fetchDetail = async () => {
+    setLoading(true);
+    try {
+      const data = await apiFetch<ClassDetail>(`/admin/classes/${classInfo.id}`);
+      setDetail(data);
+    } catch (e: unknown) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchDetail(); }, [classInfo.id]);
+
+  // Fetch available users when tab changes or search changes
+  useEffect(() => {
+    const role = activeTab === "faculty" ? "faculty" : "student";
+    const params = new URLSearchParams({ role });
+    if (search) params.set("search", search);
+    apiFetch<UserListItem[]>(`/admin/users?${params}`)
+      .then(setAllUsers)
+      .catch(() => {});
+  }, [activeTab, search]);
+
+  const assignedIds = new Set(
+    (activeTab === "faculty" ? detail?.faculty : detail?.students)?.map((p) => p.user_id) ?? []
+  );
+
+  const handleAssign = async (userId: string) => {
+    setActing(userId);
+    const path = activeTab === "faculty"
+      ? `/admin/classes/${classInfo.id}/faculty/${userId}`
+      : `/admin/classes/${classInfo.id}/students/${userId}`;
+    try {
+      await apiFetch(path, { method: "POST" });
+      await fetchDetail();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const handleRemove = async (userId: string) => {
+    setActing(userId);
+    const path = activeTab === "faculty"
+      ? `/admin/classes/${classInfo.id}/faculty/${userId}`
+      : `/admin/classes/${classInfo.id}/students/${userId}`;
+    try {
+      await apiFetch(path, { method: "DELETE" });
+      await fetchDetail();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const assigned = (activeTab === "faculty" ? detail?.faculty : detail?.students) ?? [];
+  const unassigned = allUsers.filter((u) => !assignedIds.has(String(u.id)));
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+     
+      <div className="p-5 border-b border-slate-200 flex items-center gap-4">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+        >
+          <FaArrowLeft size={13} /> Back
+        </button>
+        <div>
+          <span className="text-xs font-bold text-indigo-600 font-mono">{classInfo.code}</span>
+          <h2 className="text-base font-bold text-slate-800 leading-tight">{classInfo.name}</h2>
+        </div>
+      </div>
+
+
+      <div className="flex border-b border-slate-200">
+        {(["faculty", "students"] as ManageTab[]).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => { setActiveTab(tab); setSearch(""); }}
+            className={`px-6 py-4 text-sm font-semibold capitalize transition-colors ${
+              activeTab === tab
+                ? "border-b-2 border-indigo-600 text-indigo-700"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {tab === "faculty" ? "Assigned Faculty" : "Enrolled Students"}
+          </button>
         ))}
+      </div>
+
+      <div className="p-6 grid md:grid-cols-2 gap-6">
+        <div>
+          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+            {activeTab === "faculty" ? "Currently Assigned" : "Currently Enrolled"} ({assigned.length})
+          </h3>
+          {loading ? (
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <FaSpinner className="animate-spin" /> Loading...
+            </div>
+          ) : assigned.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">None yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {assigned.map((person) => (
+                <div
+                  key={person.user_id}
+                  className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5"
+                >
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{person.full_name}</p>
+                    <p className="text-xs text-slate-400 font-mono">
+                      {person.employee_id ?? person.enrollment_no}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRemove(person.user_id)}
+                    disabled={acting === person.user_id}
+                    className="text-rose-500 hover:text-rose-700 text-xs font-bold px-2 py-1 rounded hover:bg-rose-50 transition-colors"
+                  >
+                    {acting === person.user_id ? <FaSpinner className="animate-spin" size={12} /> : "Remove"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+            Add {activeTab === "faculty" ? "Faculty" : "Student"}
+          </h3>
+          <input
+            type="text"
+            placeholder={`Search ${activeTab === "faculty" ? "faculty" : "students"}...`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {unassigned.length === 0 ? (
+              <p className="text-xs text-slate-400 italic text-center py-4">
+                {search ? "No results found." : "All available users are already assigned."}
+              </p>
+            ) : (
+              unassigned.map((u) => (
+                <div
+                  key={String(u.id)}
+                  className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2.5 hover:bg-indigo-50 transition-colors"
+                >
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{u.profile?.full_name ?? u.email}</p>
+                    <p className="text-xs text-slate-400 font-mono">
+                      {u.profile?.employee_id ?? u.profile?.enrollment_no ?? u.email}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAssign(String(u.id))}
+                    disabled={acting === String(u.id)}
+                    className="text-indigo-600 hover:text-indigo-800 text-xs font-bold px-2 py-1 rounded hover:bg-indigo-100 transition-colors"
+                  >
+                    {acting === String(u.id) ? <FaSpinner className="animate-spin" size={12} /> : "+ Add"}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

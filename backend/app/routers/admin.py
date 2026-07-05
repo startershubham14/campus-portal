@@ -5,11 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import Literal
 from app.database.connection import get_db
-from app.database.models import User, StudentProfile, FacultyProfile
+from app.database.models import User, StudentProfile, FacultyProfile, ClassGroup
 from app.auth.schemas import UserRegister
 from app.auth.security import get_password_hash
 from app.auth.dependencies import require_admin
-from app.routers.admin_schemas import UserListItem, StatsResponse, UpdateUser
+from app.routers.admin_schemas import ( UserListItem, StatsResponse, UpdateUser,
+ ClassOut, ClassDetailOut, CreateClassRequest, FacultyInClass, StudentInClass,)
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import selectinload
 import uuid
@@ -365,3 +366,287 @@ async def get_stats(
         active_users=row.active_users,
         inactive_users=row.inactive_users,
     )
+
+# Class management endpoints
+@router.get("/classes", response_model=list[ClassOut])
+async def list_classes(
+    department: str | None = None,
+    semester: int | None = None,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """List all classes with student and faculty counts."""
+    from sqlalchemy.orm import selectinload
+    query = select(ClassGroup).options(
+        selectinload(ClassGroup.students),
+        selectinload(ClassGroup.faculty),
+    )
+    if department:
+        query = query.where(ClassGroup.department.ilike(f"%{department}%"))
+    if semester:
+        query = query.where(ClassGroup.semester == semester)
+
+    result = await db.execute(query)
+    classes = result.scalars().all()
+
+    return [
+        ClassOut(
+            id=cls.id,
+            code=cls.code,
+            name=cls.name,
+            department=cls.department,
+            semester=cls.semester,
+            student_count=len(cls.students),
+            faculty_count=len(cls.faculty),
+        )
+        for cls in classes
+    ]
+
+
+@router.post("/classes", status_code=201)
+async def create_class(
+    payload: CreateClassRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    # Check code uniqueness
+    result = await db.execute(
+        select(ClassGroup).where(ClassGroup.code == payload.code)
+    )
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="A class with this code already exists")
+
+    cls = ClassGroup(
+        code=payload.code,
+        name=payload.name,
+        department=payload.department,
+        semester=payload.semester,
+    )
+    db.add(cls)
+    await db.commit()
+    return {"message": "Class created", "id": cls.id}
+
+
+@router.delete("/classes/{class_id}", status_code=200)
+async def delete_class(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    result = await db.execute(select(ClassGroup).where(ClassGroup.id == class_id))
+    cls = result.scalars().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    await db.delete(cls)
+    await db.commit()
+    return {"message": "Class deleted"}
+
+
+@router.get("/classes/{class_id}", response_model=ClassDetailOut)
+async def get_class_detail(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Return a class with its full faculty and student lists."""
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == class_id)
+        .options(
+            selectinload(ClassGroup.faculty),
+            selectinload(ClassGroup.students),
+        )
+    )
+    cls = result.scalars().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    return ClassDetailOut(
+        id=cls.id,
+        code=cls.code,
+        name=cls.name,
+        department=cls.department,
+        semester=cls.semester,
+        faculty=[
+            FacultyInClass(
+                user_id=f.user_id,
+                full_name=f.full_name,
+                employee_id=f.employee_id,
+                department=f.department,
+            )
+            for f in cls.faculty
+        ],
+        students=[
+            StudentInClass(
+                user_id=s.user_id,
+                full_name=s.full_name,
+                enrollment_no=s.enrollment_no,
+                department=s.department,
+                current_semester=s.current_semester,
+            )
+            for s in cls.students
+        ],
+    )
+
+
+@router.post("/classes/{class_id}/faculty/{user_id}", status_code=200)
+async def assign_faculty(
+    class_id: int,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Assign a faculty member to a class. Takes the faculty's user UUID."""
+    import uuid as _uuid
+    from sqlalchemy.orm import selectinload
+
+    try:
+        uid = _uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    # Resolve to FacultyProfile
+    result = await db.execute(
+        select(FacultyProfile).where(FacultyProfile.user_id == uid)
+    )
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Faculty profile not found")
+
+    # Load class with existing faculty
+    result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == class_id)
+        .options(selectinload(ClassGroup.faculty))
+    )
+    cls = result.scalars().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    if profile in cls.faculty:
+        raise HTTPException(status_code=400, detail="Faculty already assigned to this class")
+
+    cls.faculty.append(profile)
+    await db.commit()
+    return {"message": "Faculty assigned"}
+
+
+@router.delete("/classes/{class_id}/faculty/{user_id}", status_code=200)
+async def remove_faculty(
+    class_id: int,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Remove a faculty member from a class."""
+    import uuid as _uuid
+    from sqlalchemy.orm import selectinload
+
+    try:
+        uid = _uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    result = await db.execute(
+        select(FacultyProfile).where(FacultyProfile.user_id == uid)
+    )
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Faculty profile not found")
+
+    result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == class_id)
+        .options(selectinload(ClassGroup.faculty))
+    )
+    cls = result.scalars().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    if profile not in cls.faculty:
+        raise HTTPException(status_code=400, detail="Faculty not assigned to this class")
+
+    cls.faculty.remove(profile)
+    await db.commit()
+    return {"message": "Faculty removed"}
+
+
+@router.post("/classes/{class_id}/students/{user_id}", status_code=200)
+async def enroll_student(
+    class_id: int,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Enroll a student in a class. Takes the student's user UUID."""
+    import uuid as _uuid
+    from sqlalchemy.orm import selectinload
+
+    try:
+        uid = _uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == uid)
+    )
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+
+    result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == class_id)
+        .options(selectinload(ClassGroup.students))
+    )
+    cls = result.scalars().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    if profile in cls.students:
+        raise HTTPException(status_code=400, detail="Student already enrolled in this class")
+
+    cls.students.append(profile)
+    await db.commit()
+    return {"message": "Student enrolled"}
+
+
+@router.delete("/classes/{class_id}/students/{user_id}", status_code=200)
+async def unenroll_student(
+    class_id: int,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Remove a student from a class."""
+    import uuid as _uuid
+    from sqlalchemy.orm import selectinload
+
+    try:
+        uid = _uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == uid)
+    )
+    profile = result.scalars().first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+
+    result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == class_id)
+        .options(selectinload(ClassGroup.students))
+    )
+    cls = result.scalars().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    if profile not in cls.students:
+        raise HTTPException(status_code=400, detail="Student not enrolled in this class")
+
+    cls.students.remove(profile)
+    await db.commit()
+    return {"message": "Student unenrolled"}

@@ -44,3 +44,41 @@ class UpdateUser(BaseModel):
   current_semester: Optional[int] = None
 
 
+# Class management schemas
+
+class FacultyInClass(BaseModel):
+    user_id: uuid.UUID
+    full_name: str
+    employee_id: str
+    department: str
+
+class StudentInClass(BaseModel):
+    user_id: uuid.UUID
+    full_name: str
+    enrollment_no: str
+    department: str
+    current_semester: int
+
+class ClassOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    department: str
+    semester: int
+    student_count: int
+    faculty_count: int
+
+class ClassDetailOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    department: str
+    semester: int
+    faculty: list[FacultyInClass]
+    students: list[StudentInClass]
+
+class CreateClassRequest(BaseModel):
+    code: str
+    name: str
+    department: str
+    semester: int
