@@ -48,7 +48,7 @@ async def login_user(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,         # ← Change to True when deployed over HTTPS
+        secure=settings.IS_PRODUCTION,         # ← Change to True when deployed over HTTPS
         samesite="lax",
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # in seconds
     )

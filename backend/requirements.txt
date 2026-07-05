@@ -57,3 +57,4 @@ packaging==26.2
 PyJWT==2.13.0
 slowapi==0.1.10
 wrapt==2.2.2
+boto3

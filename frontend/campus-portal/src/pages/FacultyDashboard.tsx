@@ -207,9 +207,6 @@ export default function FacultyDashboard() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Course overview — real data from GET /faculty/courses
-// ---------------------------------------------------------------------------
 
 function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) => void }) {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -314,10 +311,6 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) =
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Course detail view
-// ---------------------------------------------------------------------------
 
 type DetailTab = "content" | "assignments" | "grading";
 
@@ -427,44 +420,79 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
   );
 }
 
-// ---------------------------------------------------------------------------
-// Content tab — materials list + upload form
-// ---------------------------------------------------------------------------
+// Upload state type for tracking multi-step progress
+type UploadStatus = "idle" | "uploading_to_s3" | "saving" | "done";
 
 function ContentTab({
   courseId,
+  courseCode,
   materials,
   onMutate,
 }: {
   courseId: number;
+  courseCode?: string;
   materials: Material[];
   onMutate: () => void;
 }) {
   const [title, setTitle] = useState("");
-  const [fileUrl, setFileUrl] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const handleUpload = async () => {
-    if (!title.trim() || !fileUrl.trim()) {
-      setError("Both title and file URL are required.");
+    if (!title.trim() || !file) {
+      setError("Both title and a file are required.");
       return;
     }
-    setUploading(true);
     setError("");
+    setUploadProgress(0);
+
     try {
-      await apiFetch(`/faculty/courses/${courseId}/materials`, {
+      // Step 1: get presigned URL from our server
+      setUploadStatus("uploading_to_s3");
+      const { presigned_url, object_key } = await apiFetch<{
+        presigned_url: string;
+        object_key: string;
+      }>(`/faculty/courses/${courseId}/materials/presign`, {
         method: "POST",
-        body: JSON.stringify({ title, file_url: fileUrl }),
+        body: JSON.stringify({
+          filename: file.name,
+          content_type: file.type || "application/octet-stream",
+          class_code: courseCode,
+        }),
       });
+
+      // Step 2: PUT file directly to S3 using the presigned URL.
+      // This does NOT go through apiFetch — S3 expects no Authorization header
+      // and no Content-Type: application/json. Use raw fetch.
+      const s3Res = await fetch(presigned_url, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+      });
+
+      if (!s3Res.ok) {
+        throw new Error(`S3 upload failed: ${s3Res.status} ${s3Res.statusText}`);
+      }
+      setUploadProgress(100);
+
+      // Step 3: tell our server the upload succeeded — saves to DB
+      setUploadStatus("saving");
+      await apiFetch(`/faculty/courses/${courseId}/materials/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ title, object_key }),
+      });
+
       setTitle("");
-      setFileUrl("");
-      onMutate(); // re-fetch course detail to show new material
+      setFile(null);
+      setUploadStatus("done");
+      onMutate();
+      setTimeout(() => setUploadStatus("idle"), 2000);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
+      setUploadStatus("idle");
     }
   };
 
@@ -480,15 +508,23 @@ function ContentTab({
     }
   };
 
+  const uploading = uploadStatus === "uploading_to_s3" || uploadStatus === "saving";
+
+  const statusLabel = {
+    idle: "Upload",
+    uploading_to_s3: "Uploading to S3...",
+    saving: "Saving...",
+    done: " Uploaded!",
+  }[uploadStatus];
+
   return (
     <div className="space-y-6">
+      {/* Upload form */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
         <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
           <FaUpload className="text-indigo-600" /> Upload New Material
         </h3>
-        {error && (
-          <p className="text-red-500 text-xs mb-3">{error}</p>
-        )}
+        {error && <p className="text-red-500 text-xs mb-3 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{error}</p>}
         <div className="flex flex-col gap-3">
           <input
             type="text"
@@ -497,27 +533,52 @@ function ContentTab({
             onChange={(e) => setTitle(e.target.value)}
             className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
           />
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            {/* Hidden file input triggered by the styled button */}
             <input
-              type="url"
-              placeholder="File URL (e.g. https://drive.google.com/...)"
-              value={fileUrl}
-              onChange={(e) => setFileUrl(e.target.value)}
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+              id="file-input"
+              type="file"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.txt"
+              className="hidden"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
+            <label
+              htmlFor="file-input"
+              className="flex-1 flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-500 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+            >
+              <FaFilePdf className="text-slate-400" size={14} />
+              {file ? (
+                <span className="text-slate-700 font-medium truncate">{file.name}</span>
+              ) : (
+                <span>Choose file (PDF, DOC, PPT, ZIP...)</span>
+              )}
+            </label>
             <button
               onClick={handleUpload}
-              disabled={uploading}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 shrink-0"
+              disabled={uploading || uploadStatus === "done"}
+              className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 shrink-0 ${
+                uploadStatus === "done"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-indigo-600 text-white hover:bg-indigo-700"
+              }`}
             >
-              {uploading ? <FaSpinner className="animate-spin" size={13} /> : <FaUpload size={13} />}
-              {uploading ? "Uploading..." : "Upload"}
+              {uploading
+                ? <FaSpinner className="animate-spin" size={13} />
+                : uploadStatus === "done"
+                ? null
+                : <FaUpload size={13} />}
+              {statusLabel}
             </button>
           </div>
-          <p className="text-xs text-slate-400">
-            Paste a Google Drive, OneDrive, or direct download link.
-            {/* S3 direct upload integration goes here when available */}
-          </p>
+          {/* Progress bar — visible during S3 upload */}
+          {uploadStatus === "uploading_to_s3" && (
+            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -565,10 +626,6 @@ function ContentTab({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Assignments tab — list + create form
-// ---------------------------------------------------------------------------
 
 function AssignmentsTab({
   courseId,
@@ -698,10 +755,6 @@ function AssignmentsTab({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Grading tab — real submissions + inline grade form
-// ---------------------------------------------------------------------------
 
 function GradingTab({
   assignmentId,

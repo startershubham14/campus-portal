@@ -10,11 +10,13 @@ from app.database.models import (
     User, FacultyProfile, StudentProfile, ClassGroup,
     CourseMaterial, Assignment, Submission,
 )
-from app.auth.dependencies import require_faculty
+from app.auth.dependencies import require_faculty 
+from app.s3 import generate_presigned_upload_url, get_file_url, delete_file
 from app.routers.faculty_schemas import (
     FacultyProfileOut, CourseOut, CourseDetailOut,
     MaterialOut, AssignmentOut, SubmissionOut,
     UploadMaterialRequest, CreateAssignmentRequest, GradeSubmissionRequest,
+      PresignRequest, PresignResponse,
 )
 
 router = APIRouter(prefix="/faculty", tags=["Faculty"])
@@ -160,22 +162,27 @@ async def get_course_detail(
         ],
     )
 
+# POST /faculty/courses/{class_id}/materials/presign  — Step 1: get upload URL
 
-# POST /faculty/courses/{class_id}/materials  (to upload a course material like notes)
-
-@router.post("/courses/{class_id}/materials", status_code=201)
-async def upload_material(
+@router.post("/courses/{class_id}/materials/presign", response_model=PresignResponse)
+async def presign_material_upload(
     class_id: int,
-    payload: UploadMaterialRequest,
+    payload: PresignRequest,
     profile: FacultyProfile = Depends(get_faculty_profile),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Adds a course material (link + title) to a class.
-    File storage (S3) is out of scope here: the frontend uploads the file
-    to S3 directly and sends the resulting URL in file_url.
+    Step 1 of 2 for file upload.
+
+    Returns a presigned S3 PUT URL. The browser uses this URL to upload
+    the file directly to S3 — the file bytes never pass through this server.
+
+    Flow:
+      1. Frontend calls this endpoint with filename + content_type
+      2. Frontend PUTs the file to presigned_url (direct to S3)
+      3. Frontend calls POST /materials/confirm with title + object_key
     """
-    # Verify assignment
+    # Verify the faculty member teaches this class
     result = await db.execute(
         select(FacultyProfile)
         .where(FacultyProfile.id == profile.id)
@@ -185,18 +192,60 @@ async def upload_material(
     if class_id not in {cls.id for cls in faculty.classes}:
         raise HTTPException(status_code=403, detail="Not assigned to this class")
 
+    try:
+        presigned_url, object_key = generate_presigned_upload_url(
+            folder=f"materials/{payload.class_code.lower()}",
+            filename=payload.filename,
+            content_type=payload.content_type,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return PresignResponse(presigned_url=presigned_url, object_key=object_key)
+
+
+# POST /faculty/courses/{class_id}/materials/confirm  — Step 2: save to DB
+
+@router.post("/courses/{class_id}/materials/confirm", status_code=201)
+async def confirm_material_upload(
+    class_id: int,
+    payload: UploadMaterialRequest,   # title + object_key
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Step 2 of 2 for file upload.
+
+    Called after the browser has successfully PUT the file to S3.
+    Generates a presigned GET URL for immediate viewing and stores
+    everything in the DB.
+    """
+    result = await db.execute(
+        select(FacultyProfile)
+        .where(FacultyProfile.id == profile.id)
+        .options(selectinload(FacultyProfile.classes))
+    )
+    faculty = result.scalars().first()
+    if class_id not in {cls.id for cls in faculty.classes}:
+        raise HTTPException(status_code=403, detail="Not assigned to this class")
+
+    # Generate a presigned GET URL for immediate access
+    try:
+        view_url = get_file_url(payload.object_key)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
     material = CourseMaterial(
         title=payload.title,
-        file_url=payload.file_url,
+        file_url=view_url,
+        object_key=payload.object_key,
         class_id=class_id,
         faculty_id=profile.id,
         uploaded_at=datetime.now(timezone.utc),
     )
     db.add(material)
     await db.commit()
-    return {"message": "Material uploaded", "id": material.id}
-
-
+    return {"message": "Material saved", "id": material.id}
 
 # DELETE /faculty/materials/{material_id}
 
@@ -219,6 +268,12 @@ async def delete_material(
     material = result.scalars().first()
     if not material:
         raise HTTPException(status_code=404, detail="Material not found or not yours")
+
+    # Delete the file from S3 before removing the DB record.
+    # delete_file() is non-fatal — if S3 delete fails, the DB record
+    # is still removed (orphaned S3 objects are preferable to stuck DB records).
+    if material.object_key:
+        delete_file(material.object_key)
 
     await db.delete(material)
     await db.commit()

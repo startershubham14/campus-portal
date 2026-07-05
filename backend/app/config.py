@@ -1,15 +1,26 @@
-"""this file is for fetching the .env """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
-    """ class fetching config vars from .env """
+    # Database
     DATABASE_URL: str
+
+    # JWT
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    # This tells Pydantic to read variables from the .env file
+    # AWS S3 — used for presigned upload URLs
+    AWS_ACCESS_KEY_ID: str
+    AWS_SECRET_ACCESS_KEY: str
+    AWS_REGION: str = "ap-south-1"
+    S3_BUCKET_NAME: str
+
+    # Environment — controls secure cookie flag
+    # Set IS_PRODUCTION=True on EC2, leave False locally
+    IS_PRODUCTION: bool = False
+
     model_config = SettingsConfigDict(env_file=".env")
 
-# Create a global settings object to import across the app
+
 settings = Settings()

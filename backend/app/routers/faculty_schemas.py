@@ -74,3 +74,13 @@ class CreateAssignmentRequest(BaseModel):
 class GradeSubmissionRequest(BaseModel):
     marks_awarded: float
     feedback: Optional[str] = None
+
+
+class PresignRequest(BaseModel):
+    filename: str        # e.g. "week1-notes.pdf"
+    content_type: str    # e.g. "application/pdf"
+    class_code: str      # used as the S3 folder prefix e.g. "csc801"
+
+class PresignResponse(BaseModel):
+    presigned_url: str   # browser PUTs file here directly
+    object_key: str      # store this; pass back in the confirm call
