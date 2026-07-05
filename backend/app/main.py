@@ -6,6 +6,7 @@ from app.database import models
 from app.auth.router import router as auth_router
 from app.routers.admin import router as admin_router
 from app.routers.student import router as student_router
+from app.routers.faculty import router as faculty_router
 from app.limiter import limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -45,6 +46,7 @@ app.state.limiter = limiter
 # Register our authentication endpoints to the app
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(faculty_router)
 app.include_router(student_router)
 # A simple root endpoint to verify the server is running
 @app.get("/")

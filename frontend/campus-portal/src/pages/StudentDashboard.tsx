@@ -259,7 +259,7 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) =
               className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col group"
               onClick={() => onSelectCourse(course)}
             >
-              <div className={`h-36 bg-gradient-to-r ${CARD_COLORS[index % CARD_COLORS.length]} relative overflow-hidden`}>
+              <div className={`h-36 bg-linear-to-r ${CARD_COLORS[index % CARD_COLORS.length]} relative overflow-hidden`}>
                 <div
                   className="absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity"
                   style={{
