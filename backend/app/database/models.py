@@ -151,6 +151,9 @@ class Submission(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     file_url = Column(String, nullable=False)
+    # S3 object key — lets us regenerate presigned view URLs (they expire in 7 days)
+    # and delete the file if a student re-submits.
+    object_key = Column(String, nullable=True)
     submitted_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     marks_awarded = Column(Float, nullable=True)
     feedback = Column(Text, nullable=True)

@@ -4,7 +4,7 @@ import {
   FaBell, FaHome, FaTachometerAlt, FaBook,
   FaBars, FaEllipsisV, FaChevronDown, FaFilePdf,
   FaUsers, FaSpinner, FaClipboardList, FaSignOutAlt,
-  FaUserCircle
+  FaUserCircle, FaUpload, FaCheckCircle, FaStar, FaFileAlt
 } from "react-icons/fa";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
 
@@ -28,6 +28,12 @@ interface Assignment {
   title: string;
   description: string | null;
   due_date: string;
+  submitted: boolean;
+  submission_id: number | null;
+  submission_file_url: string | null;
+  submitted_at: string | null;
+  marks_awarded: number | null;
+  feedback: string | null;
 }
 
 interface CourseDetail extends Course {
@@ -44,13 +50,38 @@ interface StudentProfile {
 
 const API = import.meta.env.VITE_API_URL;
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${API}${path}`, { credentials: "include" });
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Request failed" }));
     throw new Error(err.detail ?? "Request failed");
   }
   return res.json() as Promise<T>;
+}
+
+// file.type is unreliable across browsers/OS — derive MIME from extension so
+// it matches exactly what the presigned URL was signed with (S3 requirement).
+function getMimeType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    pdf: "application/pdf",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    zip: "application/zip",
+    txt: "text/plain",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+  };
+  return map[ext] ?? "application/octet-stream";
 }
 
 // Cycle through these gradients for course cards for cource cards
@@ -366,7 +397,7 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
         ) : (
           <div className="mb-10">
             {activeTab === "materials"   && <MaterialsTab materials={detail?.materials ?? []} />}
-            {activeTab === "assignments" && <AssignmentsTab assignments={detail?.assignments ?? []} />}
+            {activeTab === "assignments" && <AssignmentsTab assignments={detail?.assignments ?? []} onSubmitted={fetchDetail} />}
             {activeTab === "grades"      && <GradesTab courseId={course.id} />}
           </div>
         )}
@@ -413,40 +444,195 @@ function MaterialsTab({ materials }: { materials: Material[] }) {
   );
 }
 
-function AssignmentsTab({ assignments }: { assignments: Assignment[] }) {
+function AssignmentsTab({
+  assignments,
+  onSubmitted,
+}: {
+  assignments: Assignment[];
+  onSubmitted: () => void;
+}) {
   if (assignments.length === 0) {
     return <p className="text-sm text-slate-400 py-4">No assignments yet.</p>;
   }
   return (
     <div className="space-y-3">
-      {assignments.map((a) => {
-        const due = new Date(a.due_date);
-        const isPast = due < new Date();
-        return (
-          <div key={a.id} className="border border-slate-200 rounded-xl p-5 hover:shadow-sm transition-shadow">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-                  <FaClipboardList size={16} className="text-amber-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-800">{a.title}</p>
-                  {a.description && (
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{a.description}</p>
-                  )}
-                </div>
-              </div>
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${
-                isPast
-                  ? "bg-rose-100 text-rose-600"
-                  : "bg-emerald-100 text-emerald-600"
-              }`}>
-                {isPast ? "Past due" : `Due ${due.toLocaleDateString()}`}
-              </span>
-            </div>
+      {assignments.map((a) => (
+        <AssignmentCard key={a.id} assignment={a} onSubmitted={onSubmitted} />
+      ))}
+    </div>
+  );
+}
+
+function AssignmentCard({
+  assignment: a,
+  onSubmitted,
+}: {
+  assignment: Assignment;
+  onSubmitted: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<"idle" | "uploading" | "saving">("idle");
+  const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState(false);
+
+  const due = new Date(a.due_date);
+  const isPast = due < new Date();
+  const graded = a.marks_awarded !== null;
+  const busy = status !== "idle";
+
+  const handleSubmit = async () => {
+    if (!file) {
+      setError("Choose a file first.");
+      return;
+    }
+    setError("");
+    try {
+      // Step 1: presign
+      setStatus("uploading");
+      const { presigned_url, object_key } = await apiFetch<{
+        presigned_url: string;
+        object_key: string;
+      }>(`/student/assignments/${a.id}/submit/presign`, {
+        method: "POST",
+        body: JSON.stringify({
+          filename: file.name,
+          content_type: getMimeType(file.name),
+        }),
+      });
+
+      // Step 2: PUT directly to S3 (raw fetch — no auth header/JSON content type)
+      const s3Res = await fetch(presigned_url, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": getMimeType(file.name) },
+      });
+      if (!s3Res.ok) throw new Error(`S3 upload failed: ${s3Res.status}`);
+
+      // Step 3: confirm
+      setStatus("saving");
+      await apiFetch(`/student/assignments/${a.id}/submit/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ object_key }),
+      });
+
+      setFile(null);
+      setExpanded(false);
+      onSubmitted(); // refresh parent so the status badge updates
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Submission failed");
+    } finally {
+      setStatus("idle");
+    }
+  };
+
+  return (
+    <div className="border border-slate-200 rounded-xl p-5 hover:shadow-sm transition-shadow">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+            <FaClipboardList size={16} className="text-amber-500" />
           </div>
-        );
-      })}
+          <div>
+            <p className="text-sm font-bold text-slate-800">{a.title}</p>
+            {a.description && (
+              <p className="text-xs text-slate-500 mt-1 line-clamp-2">{a.description}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Status badge: graded > submitted > past due > due date */}
+        {graded ? (
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full shrink-0 bg-indigo-100 text-indigo-700 flex items-center gap-1">
+            <FaStar size={10} /> {a.marks_awarded}
+          </span>
+        ) : a.submitted ? (
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full shrink-0 bg-emerald-100 text-emerald-700 flex items-center gap-1">
+            <FaCheckCircle size={10} /> Submitted
+          </span>
+        ) : (
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${
+            isPast ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-600"
+          }`}>
+            {isPast ? "Past due" : `Due ${due.toLocaleDateString()}`}
+          </span>
+        )}
+      </div>
+
+      {/* Submission area */}
+      <div className="mt-4 pt-4 border-t border-slate-100">
+        {a.submitted && (
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+            {a.submission_file_url && (
+              <a
+                href={a.submission_file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-indigo-600 hover:underline font-medium"
+              >
+                <FaFileAlt size={11} /> View my submission
+              </a>
+            )}
+            {a.submitted_at && (
+              <span className="text-slate-400">
+                Submitted {new Date(a.submitted_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Feedback if graded */}
+        {graded && a.feedback && (
+          <div className="mb-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            <p className="text-xs font-bold text-slate-600 mb-0.5">Faculty feedback:</p>
+            <p className="text-xs text-slate-500">{a.feedback}</p>
+          </div>
+        )}
+
+        {error && <p className="text-red-500 text-xs mb-2">{error}</p>}
+
+        {/* Don't allow re-submission once graded — the grade is final */}
+        {graded ? (
+          <p className="text-xs text-slate-400 italic">This submission has been graded.</p>
+        ) : !expanded ? (
+          <button
+            onClick={() => setExpanded(true)}
+            className="flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+          >
+            <FaUpload size={11} /> {a.submitted ? "Re-submit" : "Submit assignment"}
+          </button>
+        ) : (
+          <div className="flex gap-2 items-center">
+            <input
+              id={`sub-file-${a.id}`}
+              type="file"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.txt"
+              className="hidden"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+            <label
+              htmlFor={`sub-file-${a.id}`}
+              className="flex-1 flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-500 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+            >
+              <FaFileAlt className="text-slate-400" size={12} />
+              {file ? <span className="text-slate-700 font-medium truncate">{file.name}</span> : "Choose file"}
+            </label>
+            <button
+              onClick={handleSubmit}
+              disabled={busy}
+              className="flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-60 shrink-0"
+            >
+              {busy ? <FaSpinner className="animate-spin" size={11} /> : <FaUpload size={11} />}
+              {status === "uploading" ? "Uploading..." : status === "saving" ? "Saving..." : "Submit"}
+            </button>
+            <button
+              onClick={() => { setExpanded(false); setFile(null); setError(""); }}
+              className="text-xs text-slate-400 hover:text-slate-600 px-2"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

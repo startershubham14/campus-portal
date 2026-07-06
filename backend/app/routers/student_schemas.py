@@ -26,6 +26,7 @@ class MaterialOut(BaseModel):
     id: int
     title: str
     file_url: str
+    source_type: str = "upload"          # "upload" or "link"
     uploaded_at: Optional[str] = None   # ISO string, None if not set
 
 
@@ -33,7 +34,27 @@ class AssignmentOut(BaseModel):
     id: int
     title: str
     description: Optional[str] = None
-    due_date: str                        # ISO string
+    due_date: str                    
+    submitted: bool = False
+    submission_id: Optional[int] = None
+    submission_file_url: Optional[str] = None
+    submitted_at: Optional[str] = None
+    marks_awarded: Optional[float] = None
+    feedback: Optional[str] = None
+
+
+class SubmissionPresignRequest(BaseModel):
+    filename: str        # e.g. "assignment3.pdf"
+    content_type: str    # e.g. "application/pdf"
+
+
+class SubmissionPresignResponse(BaseModel):
+    presigned_url: str
+    object_key: str
+
+
+class ConfirmSubmissionRequest(BaseModel):
+    object_key: str      # returned by the presign step
 
 
 class CourseDetailOut(BaseModel):
