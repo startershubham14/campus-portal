@@ -392,8 +392,9 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
         ) : (
           <div className="mb-10">
             {activeTab === "content" && (
-              <ContentTab
+               <ContentTab
                 courseId={course.id}
+                courseCode={course.code}
                 materials={detail?.materials ?? []}
                 onMutate={fetchDetail}
               />
@@ -418,6 +419,25 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
       </div>
     </div>
   );
+}
+
+function getMimeType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    pdf:  "application/pdf",
+    doc:  "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ppt:  "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    xls:  "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    zip:  "application/zip",
+    txt:  "text/plain",
+    png:  "image/png",
+    jpg:  "image/jpeg",
+    jpeg: "image/jpeg",
+  };
+  return map[ext] ?? "application/octet-stream";
 }
 
 // Upload state type for tracking multi-step progress
@@ -457,9 +477,9 @@ function ContentTab({
         object_key: string;
       }>(`/faculty/courses/${courseId}/materials/presign`, {
         method: "POST",
-        body: JSON.stringify({
+          body: JSON.stringify({
           filename: file.name,
-          content_type: file.type || "application/octet-stream",
+          content_type: getMimeType(file.name),
           class_code: courseCode,
         }),
       });
@@ -470,7 +490,7 @@ function ContentTab({
       const s3Res = await fetch(presigned_url, {
         method: "PUT",
         body: file,
-        headers: { "Content-Type": file.type || "application/octet-stream" },
+        headers: { "Content-Type": getMimeType(file.name) },
       });
 
       if (!s3Res.ok) {

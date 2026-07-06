@@ -62,7 +62,7 @@ class UploadMaterialRequest(BaseModel):
     title: str
     # Accepts a URL for now. When S3 is added, the frontend uploads the file
     # directly to S3 and sends the resulting URL here — this field stays the same.
-    file_url: str
+    object_key: str
 
 
 class CreateAssignmentRequest(BaseModel):

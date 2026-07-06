@@ -5,7 +5,7 @@ from app.config import settings
 
 # 1. Create the async engine
 # echo=True prints out all the generated SQL in your terminal (for debugging!) later turn to false
-engine = create_async_engine(settings.DATABASE_URL, echo=True)
+engine = create_async_engine(settings.DATABASE_URL, echo=False)
 
 # 2. Create the async session factory
 # This will be used to spawn database sessions for every API request

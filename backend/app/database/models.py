@@ -121,7 +121,7 @@ class CourseMaterial(Base):
     title = Column(String, nullable=False)
     file_url = Column(String, nullable=False)
     object_key = Column(String, nullable=True)
-    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    uploaded_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
     faculty_id = Column(UUID(as_uuid=True), ForeignKey("faculty_profiles.id", ondelete="SET NULL"))
 
@@ -148,7 +148,7 @@ class Submission(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     file_url = Column(String, nullable=False)
-    submitted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    submitted_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     marks_awarded = Column(Float, nullable=True)
     feedback = Column(Text, nullable=True)
     assignment_id = Column(Integer, ForeignKey("assignments.id", ondelete="CASCADE"))
