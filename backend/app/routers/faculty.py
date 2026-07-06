@@ -15,8 +15,8 @@ from app.s3 import generate_presigned_upload_url, get_file_url, delete_file
 from app.routers.faculty_schemas import (
     FacultyProfileOut, CourseOut, CourseDetailOut,
     MaterialOut, AssignmentOut, SubmissionOut,
-    UploadMaterialRequest, CreateAssignmentRequest, GradeSubmissionRequest,
-      PresignRequest, PresignResponse,
+    UploadMaterialRequest, LinkMaterialRequest, CreateAssignmentRequest,
+    GradeSubmissionRequest, PresignRequest, PresignResponse,
 )
 
 router = APIRouter(prefix="/faculty", tags=["Faculty"])
@@ -145,7 +145,11 @@ async def get_course_detail(
             MaterialOut(
                 id=m.id,
                 title=m.title,
-                file_url=m.file_url,
+                # For S3 uploads, regenerate a fresh presigned GET URL on every
+                # read — the stored one expires after 7 days. For links, the
+                # stored URL is permanent so we use it as-is.
+                file_url=get_file_url(m.object_key) if m.source_type == "upload" and m.object_key else m.file_url,
+                source_type=m.source_type,
                 uploaded_at=m.uploaded_at.isoformat() if m.uploaded_at else None,
             )
             for m in cls.materials
@@ -238,6 +242,7 @@ async def confirm_material_upload(
     material = CourseMaterial(
         title=payload.title,
         file_url=view_url,
+        source_type="upload",
         object_key=payload.object_key,
         class_id=class_id,
         faculty_id=profile.id,
@@ -246,6 +251,43 @@ async def confirm_material_upload(
     db.add(material)
     await db.commit()
     return {"message": "Material saved", "id": material.id}
+
+
+# POST /faculty/courses/{class_id}/materials/link — attach an external link
+
+@router.post("/courses/{class_id}/materials/link", status_code=201)
+async def add_link_material(
+    class_id: int,
+    payload: LinkMaterialRequest,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Attach an external link (Google Drive, YouTube, etc) as a material.
+    No S3 involvement — the URL is stored as-is and served unchanged.
+    """
+    result = await db.execute(
+        select(FacultyProfile)
+        .where(FacultyProfile.id == profile.id)
+        .options(selectinload(FacultyProfile.classes))
+    )
+    faculty = result.scalars().first()
+    if class_id not in {cls.id for cls in faculty.classes}:
+        raise HTTPException(status_code=403, detail="Not assigned to this class")
+
+    material = CourseMaterial(
+        title=payload.title,
+        file_url=payload.url,
+        source_type="link",
+        object_key=None,        # no S3 object for links
+        class_id=class_id,
+        faculty_id=profile.id,
+        uploaded_at=datetime.now(timezone.utc),
+    )
+    db.add(material)
+    await db.commit()
+    return {"message": "Link added", "id": material.id}
+
 
 # DELETE /faculty/materials/{material_id}
 

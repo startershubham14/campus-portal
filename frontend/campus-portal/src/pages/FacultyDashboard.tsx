@@ -4,7 +4,8 @@ import {
   FaBell, FaHome, FaTachometerAlt, FaBook, FaBars,
   FaEllipsisV, FaChevronDown, FaFilePdf, FaUsers,
   FaPlus, FaUpload, FaCheckCircle, FaClipboardList,
-  FaSpinner, FaTrash, FaSignOutAlt, FaUserCircle, FaStar
+  FaSpinner, FaTrash, FaSignOutAlt, FaUserCircle, FaStar,
+  FaLink, FaExternalLinkAlt
 } from "react-icons/fa";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
 
@@ -30,6 +31,7 @@ interface Material {
   id: number;
   title: string;
   file_url: string;
+  source_type: "upload" | "link";
   uploaded_at: string | null;
 }
 
@@ -454,12 +456,42 @@ function ContentTab({
   materials: Material[];
   onMutate: () => void;
 }) {
+  const [mode, setMode] = useState<"upload" | "link">("upload");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [addingLink, setAddingLink] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState("");
+
+  const handleAddLink = async () => {
+    if (!title.trim() || !linkUrl.trim()) {
+      setError("Both title and a URL are required.");
+      return;
+    }
+    // Light validation — must look like a URL
+    if (!/^https?:\/\//i.test(linkUrl)) {
+      setError("URL must start with http:// or https://");
+      return;
+    }
+    setAddingLink(true);
+    setError("");
+    try {
+      await apiFetch(`/faculty/courses/${courseId}/materials/link`, {
+        method: "POST",
+        body: JSON.stringify({ title, url: linkUrl }),
+      });
+      setTitle("");
+      setLinkUrl("");
+      onMutate();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to add link");
+    } finally {
+      setAddingLink(false);
+    }
+  };
 
   const handleUpload = async () => {
     if (!title.trim() || !file) {
@@ -539,12 +571,34 @@ function ContentTab({
 
   return (
     <div className="space-y-6">
-      {/* Upload form */}
+      {/* Add-material form with mode toggle */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
         <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <FaUpload className="text-indigo-600" /> Upload New Material
+          <FaPlus className="text-indigo-600" /> Add New Material
         </h3>
+
+        {/* Mode toggle: Upload File vs Add Link */}
+        <div className="flex gap-1 bg-slate-200/60 p-1 rounded-lg w-fit mb-4">
+          <button
+            onClick={() => { setMode("upload"); setError(""); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+              mode === "upload" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <FaUpload size={11} /> Upload File
+          </button>
+          <button
+            onClick={() => { setMode("link"); setError(""); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+              mode === "link" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <FaLink size={11} /> Add Link
+          </button>
+        </div>
+
         {error && <p className="text-red-500 text-xs mb-3 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{error}</p>}
+
         <div className="flex flex-col gap-3">
           <input
             type="text"
@@ -553,50 +607,65 @@ function ContentTab({
             onChange={(e) => setTitle(e.target.value)}
             className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
           />
-          <div className="flex gap-3 items-center">
-            {/* Hidden file input triggered by the styled button */}
-            <input
-              id="file-input"
-              type="file"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.txt"
-              className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-            <label
-              htmlFor="file-input"
-              className="flex-1 flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-500 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
-            >
-              <FaFilePdf className="text-slate-400" size={14} />
-              {file ? (
-                <span className="text-slate-700 font-medium truncate">{file.name}</span>
-              ) : (
-                <span>Choose file (PDF, DOC, PPT, ZIP...)</span>
+
+          {mode === "upload" ? (
+            <>
+              <div className="flex gap-3 items-center">
+                <input
+                  id="file-input"
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.txt"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+                <label
+                  htmlFor="file-input"
+                  className="flex-1 flex items-center gap-2 border border-dashed border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-500 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+                >
+                  <FaFilePdf className="text-slate-400" size={14} />
+                  {file ? (
+                    <span className="text-slate-700 font-medium truncate">{file.name}</span>
+                  ) : (
+                    <span>Choose file (PDF, DOC, PPT, ZIP...)</span>
+                  )}
+                </label>
+                <button
+                  onClick={handleUpload}
+                  disabled={uploading || uploadStatus === "done"}
+                  className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 shrink-0 ${
+                    uploadStatus === "done" ? "bg-emerald-600 text-white" : "bg-indigo-600 text-white hover:bg-indigo-700"
+                  }`}
+                >
+                  {uploading ? <FaSpinner className="animate-spin" size={13} /> : uploadStatus === "done" ? null : <FaUpload size={13} />}
+                  {statusLabel}
+                </button>
+              </div>
+              {uploadStatus === "uploading_to_s3" && (
+                <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                </div>
               )}
-            </label>
-            <button
-              onClick={handleUpload}
-              disabled={uploading || uploadStatus === "done"}
-              className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 shrink-0 ${
-                uploadStatus === "done"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-indigo-600 text-white hover:bg-indigo-700"
-              }`}
-            >
-              {uploading
-                ? <FaSpinner className="animate-spin" size={13} />
-                : uploadStatus === "done"
-                ? null
-                : <FaUpload size={13} />}
-              {statusLabel}
-            </button>
-          </div>
-          {/* Progress bar — visible during S3 upload */}
-          {uploadStatus === "uploading_to_s3" && (
-            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-              <div
-                className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              />
+            </>
+          ) : (
+            <div className="flex gap-3 items-center">
+              <div className="flex-1 flex items-center gap-2 border border-slate-300 rounded-lg px-3 focus-within:ring-1 focus-within:ring-indigo-500">
+                <FaLink className="text-slate-400 shrink-0" size={13} />
+                <input
+                  type="url"
+                  placeholder="https://drive.google.com/... or any URL"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  className="flex-1 py-2 text-sm outline-none bg-transparent"
+                />
+              </div>
+              <button
+                onClick={handleAddLink}
+                disabled={addingLink}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 shrink-0"
+              >
+                {addingLink ? <FaSpinner className="animate-spin" size={13} /> : <FaLink size={13} />}
+                {addingLink ? "Adding..." : "Add Link"}
+              </button>
             </div>
           )}
         </div>
@@ -610,36 +679,50 @@ function ContentTab({
             <h3 className="text-sm font-bold text-slate-700">Uploaded Materials ({materials.length})</h3>
           </div>
           <div className="bg-white divide-y divide-slate-100">
-            {materials.map((item) => (
-              <div
-                key={item.id}
-                className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors pl-8"
-              >
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  <div className="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center shrink-0">
-                    <FaFilePdf size={16} className="text-rose-500" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-700 truncate">{item.title}</p>
-                    {item.uploaded_at && (
-                      <p className="text-xs text-slate-400">
-                        {new Date(item.uploaded_at).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  disabled={deletingId === item.id}
-                  className="ml-4 text-rose-500 hover:text-rose-700 transition-colors shrink-0"
-                  title="Delete material"
+            {materials.map((item) => {
+              const isLink = item.source_type === "link";
+              return (
+                <div
+                  key={item.id}
+                  className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors pl-8"
                 >
-                  {deletingId === item.id
-                    ? <FaSpinner className="animate-spin" size={14} />
-                    : <FaTrash size={14} />}
-                </button>
-              </div>
-            ))}
+                  <a
+                    href={item.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-4 flex-1 min-w-0 group"
+                  >
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                      isLink ? "bg-blue-50" : "bg-rose-50"
+                    }`}>
+                      {isLink
+                        ? <FaLink size={15} className="text-blue-500" />
+                        : <FaFilePdf size={16} className="text-rose-500" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-700 truncate group-hover:text-indigo-700 transition-colors flex items-center gap-1.5">
+                        {item.title}
+                        {isLink && <FaExternalLinkAlt size={9} className="text-slate-400" />}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {isLink ? "External link" : "Uploaded file"}
+                        {item.uploaded_at && ` · ${new Date(item.uploaded_at).toLocaleDateString()}`}
+                      </p>
+                    </div>
+                  </a>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    disabled={deletingId === item.id}
+                    className="ml-4 text-rose-500 hover:text-rose-700 transition-colors shrink-0"
+                    title="Delete material"
+                  >
+                    {deletingId === item.id
+                      ? <FaSpinner className="animate-spin" size={14} />
+                      : <FaTrash size={14} />}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

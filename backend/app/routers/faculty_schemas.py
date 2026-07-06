@@ -25,6 +25,7 @@ class MaterialOut(BaseModel):
     id: int
     title: str
     file_url: str
+    source_type: str = "upload"   # "upload" or "link"
     uploaded_at: Optional[str] = None
 
 
@@ -60,9 +61,16 @@ class CourseDetailOut(BaseModel):
 
 class UploadMaterialRequest(BaseModel):
     title: str
-    # Accepts a URL for now. When S3 is added, the frontend uploads the file
-    # directly to S3 and sends the resulting URL here — this field stays the same.
+    # S3 object key from the presign step. The confirm endpoint turns this
+    # into a presigned GET URL stored as file_url.
     object_key: str
+
+
+class LinkMaterialRequest(BaseModel):
+    title: str
+    # External URL (Google Drive, YouTube, etc). Stored as-is —
+    # no S3, no presigned URL regeneration.
+    url: str
 
 
 class CreateAssignmentRequest(BaseModel):
