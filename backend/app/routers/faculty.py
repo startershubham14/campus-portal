@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.database.connection import get_db
 from app.database.models import (
     User, FacultyProfile, StudentProfile, ClassGroup,
-    CourseMaterial, Assignment, Submission, Attendance,
+    CourseMaterial, Assignment, Submission, Attendance, Exam, ExamResult,
 )
 from app.auth.dependencies import require_faculty 
 from app.s3 import generate_presigned_upload_url, get_file_url, delete_file
@@ -18,6 +18,10 @@ from app.routers.faculty_schemas import (
     UploadMaterialRequest, LinkMaterialRequest, CreateAssignmentRequest,
     GradeSubmissionRequest, PresignRequest, PresignResponse,
     AttendanceRosterResponse, AttendanceRosterItem, SaveAttendanceRequest,
+)
+from app.routers.exam_schemas import (
+    CreateExamRequest, SaveResultsRequest,
+    ExamListItem, ResultRosterItem, ExamAnalytics, ExamRosterResponse,
 )
 
 router = APIRouter(prefix="/faculty", tags=["Faculty"])
@@ -562,3 +566,241 @@ async def save_attendance(
 
     await db.commit()
     return {"message": "Attendance saved", "updated": updated, "created": created}
+
+# ===========================================================================
+# Exams — create, enter results, analytics
+# ===========================================================================
+
+async def _assert_owns_exam(exam_id: int, profile: FacultyProfile, db: AsyncSession) -> Exam:
+    """Fetch the exam and ensure this faculty teaches its class."""
+    result = await db.execute(select(Exam).where(Exam.id == exam_id))
+    exam = result.scalars().first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    # Reuse the existing class-assignment guard
+    await _verify_teaches_class(exam.class_id, profile, db)
+    return exam
+
+
+@router.post("/courses/{class_id}/exams", status_code=201)
+async def create_exam(
+    class_id: int,
+    payload: CreateExamRequest,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    await _verify_teaches_class(class_id, profile, db)
+    if payload.max_marks <= 0:
+        raise HTTPException(status_code=400, detail="max_marks must be positive")
+    try:
+        exam_date = date_type.fromisoformat(payload.exam_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date. Use YYYY-MM-DD")
+
+    exam = Exam(
+        class_id=class_id,
+        faculty_id=profile.id,
+        title=payload.title,
+        exam_type=payload.exam_type,
+        max_marks=payload.max_marks,
+        exam_date=exam_date,
+    )
+    db.add(exam)
+    await db.commit()
+    return {"message": "Exam created", "id": exam.id}
+
+
+@router.get("/courses/{class_id}/exams", response_model=list[ExamListItem])
+async def list_exams(
+    class_id: int,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    await _verify_teaches_class(class_id, profile, db)
+
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(StudentProfile)
+        .join(StudentProfile.classes)
+        .where(ClassGroup.id == class_id)
+    )
+    total_students = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(Exam)
+        .where(Exam.class_id == class_id)
+        .options(selectinload(Exam.results))
+        .order_by(Exam.exam_date.desc())
+    )
+    exams = result.scalars().all()
+
+    return [
+        ExamListItem(
+            id=e.id,
+            title=e.title,
+            exam_type=e.exam_type,
+            max_marks=e.max_marks,
+            exam_date=e.exam_date.isoformat(),
+            results_entered=len(e.results),
+            total_students=total_students,
+        )
+        for e in exams
+    ]
+
+
+@router.delete("/exams/{exam_id}")
+async def delete_exam(
+    exam_id: int,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    exam = await _assert_owns_exam(exam_id, profile, db)
+    await db.delete(exam)   # cascade deletes results
+    await db.commit()
+    return {"message": "Exam deleted"}
+
+
+@router.get("/exams/{exam_id}/roster", response_model=ExamRosterResponse)
+async def get_exam_roster(
+    exam_id: int,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """Roster for entering marks: every enrolled student + their result if entered."""
+    exam = await _assert_owns_exam(exam_id, profile, db)
+
+    cls_result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == exam.class_id)
+        .options(selectinload(ClassGroup.students))
+    )
+    cls = cls_result.scalars().first()
+
+    res_result = await db.execute(
+        select(ExamResult).where(ExamResult.exam_id == exam_id)
+    )
+    results = {r.student_id: r for r in res_result.scalars().all()}
+
+    roster = [
+        ResultRosterItem(
+            student_id=s.id,
+            full_name=s.full_name,
+            enrollment_no=s.enrollment_no,
+            marks_obtained=results[s.id].marks_obtained if s.id in results else None,
+            remarks=results[s.id].remarks if s.id in results else None,
+        )
+        for s in sorted(cls.students, key=lambda x: x.enrollment_no)
+    ]
+
+    return ExamRosterResponse(
+        exam_id=exam.id, title=exam.title, max_marks=exam.max_marks, roster=roster
+    )
+
+
+@router.post("/exams/{exam_id}/results", status_code=200)
+async def save_results(
+    exam_id: int,
+    payload: SaveResultsRequest,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk upsert results. Rejects marks above max_marks or below zero."""
+    exam = await _assert_owns_exam(exam_id, profile, db)
+
+    existing_result = await db.execute(
+        select(ExamResult).where(ExamResult.exam_id == exam_id)
+    )
+    existing = {r.student_id: r for r in existing_result.scalars().all()}
+
+    cls_result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == exam.class_id)
+        .options(selectinload(ClassGroup.students))
+    )
+    cls = cls_result.scalars().first()
+    enrolled = {s.id for s in cls.students}
+
+    updated, created = 0, 0
+    for entry in payload.results:
+        if entry.student_id not in enrolled:
+            continue
+        if entry.marks_obtained < 0 or entry.marks_obtained > exam.max_marks:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Marks must be between 0 and {exam.max_marks}",
+            )
+        row = existing.get(entry.student_id)
+        if row:
+            row.marks_obtained = entry.marks_obtained
+            row.remarks = entry.remarks
+            updated += 1
+        else:
+            db.add(ExamResult(
+                exam_id=exam_id,
+                student_id=entry.student_id,
+                marks_obtained=entry.marks_obtained,
+                remarks=entry.remarks,
+            ))
+            created += 1
+
+    await db.commit()
+    return {"message": "Results saved", "updated": updated, "created": created}
+
+
+@router.get("/exams/{exam_id}/analytics", response_model=ExamAnalytics)
+async def exam_analytics(
+    exam_id: int,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """Class performance stats for one exam: avg, high, low, pass/fail, distribution."""
+    exam = await _assert_owns_exam(exam_id, profile, db)
+
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(StudentProfile)
+        .join(StudentProfile.classes)
+        .where(ClassGroup.id == exam.class_id)
+    )
+    total_students = count_result.scalar() or 0
+
+    res_result = await db.execute(
+        select(ExamResult).where(ExamResult.exam_id == exam_id)
+    )
+    results = res_result.scalars().all()
+    marks = [r.marks_obtained for r in results]
+
+    if not marks:
+        return ExamAnalytics(
+            exam_id=exam.id, title=exam.title, max_marks=exam.max_marks,
+            total_students=total_students, results_entered=0,
+        )
+
+    pass_threshold = 0.4 * exam.max_marks   # 40% pass mark
+    pass_count = sum(1 for m in marks if m >= pass_threshold)
+
+    buckets = [(0, 20), (20, 40), (40, 60), (60, 80), (80, 100)]
+    distribution = []
+    for lo, hi in buckets:
+        lo_m = lo / 100 * exam.max_marks
+        hi_m = hi / 100 * exam.max_marks
+        # Top bucket inclusive of max; others half-open [lo, hi)
+        if hi == 100:
+            count = sum(1 for m in marks if lo_m <= m <= hi_m)
+        else:
+            count = sum(1 for m in marks if lo_m <= m < hi_m)
+        distribution.append({"bucket": f"{lo}-{hi}%", "count": count})
+
+    return ExamAnalytics(
+        exam_id=exam.id,
+        title=exam.title,
+        max_marks=exam.max_marks,
+        total_students=total_students,
+        results_entered=len(marks),
+        average=round(sum(marks) / len(marks), 2),
+        highest=max(marks),
+        lowest=min(marks),
+        pass_count=pass_count,
+        fail_count=len(marks) - pass_count,
+        distribution=distribution,
+    )

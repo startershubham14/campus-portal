@@ -168,3 +168,37 @@ class Submission(Base):
 
     assignment = relationship("Assignment", back_populates="submissions")
     student = relationship("StudentProfile", back_populates="submissions")
+
+
+class Exam(Base):
+    __tablename__ = "exams"
+
+    id = Column(Integer, primary_key=True, index=True)
+    class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"), nullable=False)
+    faculty_id = Column(UUID(as_uuid=True), ForeignKey("faculty_profiles.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String, nullable=False)
+    # "quiz" | "midterm" | "final" | "assignment" — validated at the schema layer
+    exam_type = Column(String, nullable=False, default="quiz")
+    max_marks = Column(Float, nullable=False)
+    exam_date = Column(Date, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    class_group = relationship("ClassGroup")
+    results = relationship("ExamResult", back_populates="exam", cascade="all, delete-orphan")
+
+
+class ExamResult(Base):
+    __tablename__ = "exam_results"
+    # One result per student per exam — re-entering marks updates, never duplicates
+    __table_args__ = (
+        UniqueConstraint("exam_id", "student_id", name="uq_exam_result_exam_student"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False)
+    marks_obtained = Column(Float, nullable=False)
+    remarks = Column(String, nullable=True)
+
+    exam = relationship("Exam", back_populates="results")
+    student = relationship("StudentProfile")

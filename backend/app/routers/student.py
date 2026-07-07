@@ -7,7 +7,8 @@ from sqlalchemy.orm import selectinload
 from app.database.connection import get_db
 from app.database.models import (
     User, StudentProfile, ClassGroup,
-    Attendance, Grade, CourseMaterial, Assignment, Submission
+    Attendance, Grade, CourseMaterial, Assignment, Submission,
+    Exam, ExamResult,
 )
 from app.auth.dependencies import require_student
 from app.s3 import generate_presigned_upload_url, get_file_url, delete_file
@@ -16,6 +17,7 @@ from app.routers.student_schemas import (
     MaterialOut, AssignmentOut, AttendanceOut, GradeOut,
     SubmissionPresignRequest, SubmissionPresignResponse, ConfirmSubmissionRequest,
 )
+from app.routers.exam_schemas import StudentExamResult
 
 router = APIRouter(prefix="/student", tags=["Student"])
 
@@ -377,3 +379,75 @@ async def confirm_submission(
     db.add(submission)
     await db.commit()
     return {"message": "Submission received", "id": submission.id}
+
+# ---------------------------------------------------------------------------
+# GET /student/results — exam results across all enrolled classes
+# ---------------------------------------------------------------------------
+
+@router.get("/results", response_model=list[StudentExamResult])
+async def get_exam_results(
+    profile: StudentProfile = Depends(get_student_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Every exam in the student's enrolled classes, with their mark, class
+    average, and 1-based rank. Rank uses standard competition ranking
+    (ties share a rank). Ungraded exams are still returned (marks None).
+    """
+    stu_result = await db.execute(
+        select(StudentProfile)
+        .where(StudentProfile.id == profile.id)
+        .options(selectinload(StudentProfile.classes))
+    )
+    student = stu_result.scalars().first()
+    class_ids = [c.id for c in student.classes]
+    class_lookup = {c.id: c for c in student.classes}
+
+    if not class_ids:
+        return []
+
+    exam_result = await db.execute(
+        select(Exam)
+        .where(Exam.class_id.in_(class_ids))
+        .options(selectinload(Exam.results))
+        .order_by(Exam.exam_date.desc())
+    )
+    exams = exam_result.scalars().all()
+
+    output: list[StudentExamResult] = []
+    for exam in exams:
+        cls = class_lookup.get(exam.class_id)
+        all_marks = [r.marks_obtained for r in exam.results]
+        my_result = next((r for r in exam.results if r.student_id == profile.id), None)
+
+        class_average = round(sum(all_marks) / len(all_marks), 2) if all_marks else None
+
+        rank = None
+        if my_result is not None and all_marks:
+            # Standard competition ranking: 1 + number strictly above
+            higher = sum(1 for m in all_marks if m > my_result.marks_obtained)
+            rank = higher + 1
+
+        pct = (
+            round(my_result.marks_obtained / exam.max_marks * 100, 2)
+            if my_result is not None and exam.max_marks
+            else None
+        )
+
+        output.append(StudentExamResult(
+            exam_id=exam.id,
+            title=exam.title,
+            exam_type=exam.exam_type,
+            exam_date=exam.exam_date.isoformat(),
+            class_code=cls.code if cls else "",
+            class_name=cls.name if cls else "",
+            max_marks=exam.max_marks,
+            marks_obtained=my_result.marks_obtained if my_result else None,
+            percentage=pct,
+            remarks=my_result.remarks if my_result else None,
+            class_average=class_average,
+            rank=rank,
+            total_ranked=len(all_marks) if my_result else None,
+        ))
+
+    return output
