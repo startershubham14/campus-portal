@@ -5,7 +5,7 @@ import {
   FaEllipsisV, FaChevronDown, FaFilePdf, FaUsers,
   FaPlus, FaUpload, FaCheckCircle, FaClipboardList,
   FaSpinner, FaTrash, FaSignOutAlt, FaUserCircle, FaStar,
-  FaLink, FaExternalLinkAlt
+  FaLink, FaExternalLinkAlt, FaCalendarAlt, FaCheck, FaTimes as FaX, FaSave
 } from "react-icons/fa";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
 
@@ -56,6 +56,13 @@ interface Submission {
   submitted_at: string | null;
   marks_awarded: number | null;
   feedback: string | null;
+}
+
+interface RosterItem {
+  student_id: string;
+  full_name: string;
+  enrollment_no: string;
+  is_present: boolean | null;
 }
 
 
@@ -314,7 +321,7 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) =
   );
 }
 
-type DetailTab = "content" | "assignments" | "grading";
+type DetailTab = "content" | "assignments" | "grading" | "attendance";
 
 function CourseDetailView({ course, onBack }: { course: Course; onBack: () => void }) {
   const [detail, setDetail] = useState<CourseDetail | null>(null);
@@ -342,6 +349,7 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
     { id: "content",     label: "Course Content" },
     { id: "assignments", label: "Assignments" },
     { id: "grading",     label: "Grading" },
+    { id: "attendance",  label: "Attendance" },
   ];
 
   return (
@@ -415,6 +423,9 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
                 assignments={detail?.assignments ?? []}
                 onSelectAssignment={setGradingAssignmentId}
               />
+            )}
+            {activeTab === "attendance" && (
+              <AttendanceTab courseId={course.id} />
             )}
           </div>
         )}
@@ -1064,6 +1075,181 @@ function GradingTab({
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+// Attendance tab — pick a date, mark the roster present/absent, bulk save
+
+
+function AttendanceTab({ courseId }: { courseId: number }) {
+  // Default to today in YYYY-MM-DD (local)
+  const today = new Date().toISOString().split("T")[0];
+  const [date, setDate] = useState(today);
+  const [roster, setRoster] = useState<RosterItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [savedMsg, setSavedMsg] = useState("");
+
+  const fetchRoster = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    setSavedMsg("");
+    try {
+      const data = await apiFetch<{ roster: RosterItem[] }>(
+        `/faculty/courses/${courseId}/attendance?date=${date}`
+      );
+      setRoster(data.roster);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load roster");
+    } finally {
+      setLoading(false);
+    }
+  }, [courseId, date]);
+
+  useEffect(() => { fetchRoster(); }, [fetchRoster]);
+
+  const setPresence = (studentId: string, present: boolean) => {
+    setRoster((prev) =>
+      prev.map((r) => (r.student_id === studentId ? { ...r, is_present: present } : r))
+    );
+  };
+
+  const markAll = (present: boolean) => {
+    setRoster((prev) => prev.map((r) => ({ ...r, is_present: present })));
+  };
+
+  const handleSave = async () => {
+    // Only send students that have an explicit present/absent value
+    const marks = roster
+      .filter((r) => r.is_present !== null)
+      .map((r) => ({ student_id: r.student_id, is_present: r.is_present as boolean }));
+
+    if (marks.length === 0) {
+      setError("Mark at least one student before saving.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setSavedMsg("");
+    try {
+      await apiFetch(`/faculty/courses/${courseId}/attendance`, {
+        method: "POST",
+        body: JSON.stringify({ date, marks }),
+      });
+      setSavedMsg(`Attendance saved for ${new Date(date).toLocaleDateString()}`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const presentCount = roster.filter((r) => r.is_present === true).length;
+  const absentCount = roster.filter((r) => r.is_present === false).length;
+  const unmarkedCount = roster.filter((r) => r.is_present === null).length;
+
+  return (
+    <div className="space-y-5">
+      {/* Date picker + summary */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <FaCalendarAlt className="text-indigo-600" />
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Attendance date</label>
+            <input
+              type="date"
+              value={date}
+              max={today}
+              onChange={(e) => setDate(e.target.value)}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-700 focus:ring-1 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+        </div>
+        <div className="flex gap-4 text-xs font-bold">
+          <span className="text-emerald-600">{presentCount} Present</span>
+          <span className="text-rose-600">{absentCount} Absent</span>
+          <span className="text-slate-400">{unmarkedCount} Unmarked</span>
+        </div>
+      </div>
+
+      {error && <p className="text-red-500 text-xs bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{error}</p>}
+      {savedMsg && <p className="text-emerald-600 text-xs bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg flex items-center gap-2"><FaCheckCircle size={12} /> {savedMsg}</p>}
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
+          <FaSpinner className="animate-spin" /> Loading roster...
+        </div>
+      ) : roster.length === 0 ? (
+        <div className="text-center py-12 text-slate-400">
+          <FaUsers size={32} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No students enrolled in this class.</p>
+        </div>
+      ) : (
+        <>
+          {/* Bulk actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => markAll(true)}
+              className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              Mark all present
+            </button>
+            <button
+              onClick={() => markAll(false)}
+              className="text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              Mark all absent
+            </button>
+          </div>
+
+          {/* Roster */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm divide-y divide-slate-100">
+            {roster.map((r) => (
+              <div key={r.student_id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">{r.full_name}</p>
+                  <p className="text-xs text-slate-400 font-mono">{r.enrollment_no}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPresence(r.student_id, true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                      r.is_present === true
+                        ? "bg-emerald-600 text-white border-emerald-600"
+                        : "bg-white text-slate-500 border-slate-200 hover:border-emerald-400"
+                    }`}
+                  >
+                    <FaCheck size={10} /> Present
+                  </button>
+                  <button
+                    onClick={() => setPresence(r.student_id, false)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                      r.is_present === false
+                        ? "bg-rose-600 text-white border-rose-600"
+                        : "bg-white text-slate-500 border-slate-200 hover:border-rose-400"
+                    }`}
+                  >
+                    <FaX size={10} /> Absent
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Save */}
+          <div className="flex justify-end">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60"
+            >
+              {saving ? <FaSpinner className="animate-spin" size={13} /> : <FaSave size={13} />}
+              {saving ? "Saving..." : "Save Attendance"}
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

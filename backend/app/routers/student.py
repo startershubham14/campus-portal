@@ -209,14 +209,10 @@ async def get_attendance(
     query = select(Attendance).where(Attendance.student_id == profile.id)
 
     if class_id is not None:
-        result = await db.execute(
-            select(ClassGroup.name).where(ClassGroup.id == class_id)
-        )
-        class_name = result.scalar()
-        if class_name:
-            query = query.where(Attendance.subject == class_name)
+        query = query.where(Attendance.class_id == class_id)
 
-    query = query.order_by(Attendance.date.desc())
+    # Eager-load the class so we can return its name as `subject`
+    query = query.options(selectinload(Attendance.class_group)).order_by(Attendance.date.desc())
     result = await db.execute(query)
     records = result.scalars().all()
 
@@ -224,7 +220,8 @@ async def get_attendance(
         AttendanceOut(
             id=r.id,
             date=r.date.isoformat(),
-            subject=r.subject,
+            # `subject` is now derived from the linked class name, not a stored string
+            subject=r.class_group.name if r.class_group else "Unknown",
             is_present=r.is_present,
         )
         for r in records

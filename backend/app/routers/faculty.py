@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as date_type
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.database.connection import get_db
 from app.database.models import (
     User, FacultyProfile, StudentProfile, ClassGroup,
-    CourseMaterial, Assignment, Submission,
+    CourseMaterial, Assignment, Submission, Attendance,
 )
 from app.auth.dependencies import require_faculty 
 from app.s3 import generate_presigned_upload_url, get_file_url, delete_file
@@ -17,6 +17,7 @@ from app.routers.faculty_schemas import (
     MaterialOut, AssignmentOut, SubmissionOut,
     UploadMaterialRequest, LinkMaterialRequest, CreateAssignmentRequest,
     GradeSubmissionRequest, PresignRequest, PresignResponse,
+    AttendanceRosterResponse, AttendanceRosterItem, SaveAttendanceRequest,
 )
 
 router = APIRouter(prefix="/faculty", tags=["Faculty"])
@@ -433,3 +434,131 @@ async def grade_submission(
     submission.feedback = payload.feedback
     await db.commit()
     return {"message": "Submission graded"}
+
+# ---------------------------------------------------------------------------
+# Attendance — roster + bulk save
+# ---------------------------------------------------------------------------
+
+async def _verify_teaches_class(class_id: int, profile: FacultyProfile, db: AsyncSession):
+    """Raise 403 unless this faculty member is assigned to the class."""
+    result = await db.execute(
+        select(FacultyProfile)
+        .where(FacultyProfile.id == profile.id)
+        .options(selectinload(FacultyProfile.classes))
+    )
+    faculty = result.scalars().first()
+    if class_id not in {cls.id for cls in faculty.classes}:
+        raise HTTPException(status_code=403, detail="Not assigned to this class")
+
+
+@router.get(
+    "/courses/{class_id}/attendance",
+    response_model=AttendanceRosterResponse,
+)
+async def get_attendance_roster(
+    class_id: int,
+    date: str,   # required query param, ISO "YYYY-MM-DD"
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns the full enrolled roster for a class plus any attendance already
+    marked for the given date. is_present is None for students not yet marked,
+    so the frontend can distinguish 'unmarked' from 'marked absent'.
+    """
+    await _verify_teaches_class(class_id, profile, db)
+
+    try:
+        target_date = date_type.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date. Use YYYY-MM-DD")
+
+    # Enrolled students
+    result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == class_id)
+        .options(selectinload(ClassGroup.students))
+    )
+    cls = result.scalars().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    # Existing attendance for that date, keyed by student_id
+    att_result = await db.execute(
+        select(Attendance).where(
+            Attendance.class_id == class_id,
+            Attendance.date == target_date,
+        )
+    )
+    marked = {a.student_id: a.is_present for a in att_result.scalars().all()}
+
+    roster = [
+        AttendanceRosterItem(
+            student_id=s.id,
+            full_name=s.full_name,
+            enrollment_no=s.enrollment_no,
+            is_present=marked.get(s.id),   # None if not marked
+        )
+        # Stable ordering so the list doesn't shuffle between loads
+        for s in sorted(cls.students, key=lambda x: x.enrollment_no)
+    ]
+
+    return AttendanceRosterResponse(class_id=class_id, date=date, roster=roster)
+
+
+@router.post("/courses/{class_id}/attendance", status_code=200)
+async def save_attendance(
+    class_id: int,
+    payload: SaveAttendanceRequest,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Bulk upsert attendance for a class on a date. For each student in the
+    payload: update the existing row if one exists for (student, class, date),
+    otherwise insert. Lets faculty re-save to correct mistakes on any date.
+    """
+    await _verify_teaches_class(class_id, profile, db)
+
+    try:
+        target_date = date_type.fromisoformat(payload.date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date. Use YYYY-MM-DD")
+
+    # Load existing rows for this class+date once, keyed by student_id
+    existing_result = await db.execute(
+        select(Attendance).where(
+            Attendance.class_id == class_id,
+            Attendance.date == target_date,
+        )
+    )
+    existing = {a.student_id: a for a in existing_result.scalars().all()}
+
+    # Guard: only accept students actually enrolled in this class
+    roster_result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == class_id)
+        .options(selectinload(ClassGroup.students))
+    )
+    cls = roster_result.scalars().first()
+    enrolled_ids = {s.id for s in cls.students}
+
+    updated, created = 0, 0
+    for mark in payload.marks:
+        if mark.student_id not in enrolled_ids:
+            continue  # silently skip non-enrolled ids rather than failing whole batch
+        row = existing.get(mark.student_id)
+        if row:
+            row.is_present = mark.is_present
+            updated += 1
+        else:
+            db.add(Attendance(
+                student_id=mark.student_id,
+                class_id=class_id,
+                date=target_date,
+                is_present=mark.is_present,
+            ))
+            created += 1
+
+    await db.commit()
+    return {"message": "Attendance saved", "updated": updated, "created": created}

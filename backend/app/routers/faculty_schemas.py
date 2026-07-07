@@ -92,3 +92,27 @@ class PresignRequest(BaseModel):
 class PresignResponse(BaseModel):
     presigned_url: str   # browser PUTs file here directly
     object_key: str      # store this; pass back in the confirm call
+
+#schemas for attendence
+class AttendanceRosterItem(BaseModel):
+    student_id: uuid.UUID       # StudentProfile.id
+    full_name: str
+    enrollment_no: str
+    # is_present: Present status for the queried date. None = not yet marked that day.
+    is_present: Optional[bool] = None
+
+
+class AttendanceRosterResponse(BaseModel):
+    class_id: int
+    date: str               
+    roster: list[AttendanceRosterItem]
+
+
+class AttendanceMark(BaseModel):
+    student_id: uuid.UUID
+    is_present: bool
+
+
+class SaveAttendanceRequest(BaseModel):
+    date: str               
+    marks: list[AttendanceMark]

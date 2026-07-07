@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float, Boolean, Text, Table, DateTime, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float, Boolean, Text, Table, DateTime, Enum, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -70,14 +70,20 @@ class FacultyProfile(Base):
 #  that expose these IDs externally.
 class Attendance(Base):
     __tablename__ = "attendance"
+    # One attendance record per student per class per date — prevents
+    # duplicate rows when faculty re-saves attendance for the same day.
+    __table_args__ = (
+        UniqueConstraint("student_id", "class_id", "date", name="uq_attendance_student_class_date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"))
+    class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"))
     date = Column(Date, nullable=False)
-    subject = Column(String, nullable=False)
     is_present = Column(Boolean, nullable=False)
 
     student = relationship("StudentProfile", back_populates="attendance")
+    class_group = relationship("ClassGroup")
 
 class Grade(Base):
     __tablename__ = "grades"
