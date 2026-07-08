@@ -5,8 +5,10 @@ import {
   FaEllipsisV, FaChevronDown, FaFilePdf, FaUsers,
   FaPlus, FaUpload, FaCheckCircle, FaClipboardList,
   FaSpinner, FaTrash, FaSignOutAlt, FaUserCircle, FaStar,
-  FaLink, FaExternalLinkAlt, FaCalendarAlt, FaCheck, FaTimes as FaX, FaSave
+FaLink, FaExternalLinkAlt, FaCalendarAlt, FaCheck, FaTimes as FaX, FaSave,
+  FaExclamationTriangle, FaChartBar
 } from "react-icons/fa";
+import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
 
 // Types matching faculty API schemas
@@ -1082,7 +1084,7 @@ function GradingTab({
 // Attendance tab — pick a date, mark the roster present/absent, bulk save
 
 
-function AttendanceTab({ courseId }: { courseId: number }) {
+function AttendanceMarkPanel({ courseId }: { courseId: number }) {
   // Default to today in YYYY-MM-DD (local)
   const today = new Date().toISOString().split("T")[0];
   const [date, setDate] = useState(today);
@@ -1251,6 +1253,178 @@ function AttendanceTab({ courseId }: { courseId: number }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Attendance tab wrapper — toggle between marking and the summary dashboard
+
+function AttendanceTab({ courseId }: { courseId: number }) {
+  const [mode, setMode] = useState<"mark" | "summary">("mark");
+
+  return (
+    <div className="space-y-5">
+      {/* Toggle */}
+      <div className="flex gap-1 bg-slate-200/60 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setMode("mark")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            mode === "mark" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <FaCalendarAlt size={11} /> Mark Attendance
+        </button>
+        <button
+          onClick={() => setMode("summary")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            mode === "summary" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <FaChartBar size={11} /> Summary
+        </button>
+      </div>
+
+      {mode === "mark" ? <AttendanceMarkPanel courseId={courseId} /> : <AttendanceSummaryPanel courseId={courseId} />}
+    </div>
+  );
+}
+
+// Attendance summary — class average + worst-first per-student bars
+
+interface StudentStat {
+  student_id: string;
+  full_name: string;
+  enrollment_no: string;
+  present: number;
+  total: number;
+  percentage: number;
+  status: "safe" | "warning" | "critical";
+}
+
+interface ClassSummary {
+  class_id: number;
+  total_sessions: number;
+  class_average: number;
+  at_risk_count: number;
+  students: StudentStat[];
+}
+
+// Same color language as the student dashboard for consistency
+const F_STATUS = {
+  safe:     { color: "#10b981", text: "text-emerald-600", bg: "bg-emerald-50" },
+  warning:  { color: "#f59e0b", text: "text-amber-600",   bg: "bg-amber-50" },
+  critical: { color: "#f43f5e", text: "text-rose-600",    bg: "bg-rose-50" },
+};
+
+function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
+  const [data, setData] = useState<ClassSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch<ClassSummary>(`/faculty/courses/${courseId}/attendance/summary`)
+      .then(setData)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [courseId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
+        <FaSpinner className="animate-spin" /> Loading summary...
+      </div>
+    );
+  }
+  if (error) return <p className="text-red-500 text-sm py-4">{error}</p>;
+  if (!data) return null;
+
+  if (data.total_sessions === 0) {
+    return (
+      <div className="text-center py-12 text-slate-400">
+        <FaChartBar size={32} className="mx-auto mb-3 opacity-30" />
+        <p className="text-sm">No attendance recorded yet. Mark some classes first.</p>
+      </div>
+    );
+  }
+
+  // Chart data — already sorted worst-first by the backend
+  const chartData = data.students.map((s) => ({
+    name: s.enrollment_no,
+    percentage: s.percentage,
+    status: s.status,
+  }));
+
+  return (
+    <div className="space-y-6">
+      {/* Header stats — three big numbers anyone can read */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 text-center">
+          <p className="text-3xl font-extrabold text-slate-800">{data.class_average}%</p>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">Class Average</p>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl p-5 text-center">
+          <p className="text-3xl font-extrabold text-slate-800">{data.total_sessions}</p>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">Classes Held</p>
+        </div>
+        <div className={`rounded-xl p-5 text-center border ${data.at_risk_count > 0 ? "bg-rose-50 border-rose-200" : "bg-emerald-50 border-emerald-200"}`}>
+          <p className={`text-3xl font-extrabold ${data.at_risk_count > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+            {data.at_risk_count}
+          </p>
+          <p className={`text-xs font-bold uppercase tracking-wider mt-1 ${data.at_risk_count > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+            Below 75%
+          </p>
+        </div>
+      </div>
+
+      {/* At-risk callout */}
+      {data.at_risk_count > 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-lg px-4 py-3 flex items-center gap-2 text-sm text-rose-700">
+          <FaExclamationTriangle size={13} />
+          <span>
+            <span className="font-bold">{data.at_risk_count} student{data.at_risk_count !== 1 ? "s" : ""}</span> below the 75% threshold — highlighted in red below.
+          </span>
+        </div>
+      )}
+
+      {/* Bar chart — worst first, color-coded */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h3 className="text-sm font-bold text-slate-700 mb-1">Attendance by Student</h3>
+        <p className="text-xs text-slate-400 mb-4">Sorted lowest first. Red bars are below 75%.</p>
+        <ResponsiveContainer width="100%" height={Math.max(200, data.students.length * 38)}>
+          <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30 }}>
+            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+            <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
+            <Tooltip
+              formatter={(v: number) => [`${v}%`, "Attendance"]}
+              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+            />
+            <Bar dataKey="percentage" radius={[0, 4, 4, 0]}>
+              {chartData.map((entry, i) => (
+                <Cell key={i} fill={F_STATUS[entry.status].color} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Detailed list — worst first */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+        {data.students.map((s) => {
+          const c = F_STATUS[s.status];
+          return (
+            <div key={s.student_id} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+              <div>
+                <p className="text-sm font-bold text-slate-800">{s.full_name}</p>
+                <p className="text-xs text-slate-400 font-mono">{s.enrollment_no}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-slate-500">{s.present}/{s.total} present</span>
+                <span className={`text-sm font-extrabold ${c.text} w-14 text-right`}>{s.percentage}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

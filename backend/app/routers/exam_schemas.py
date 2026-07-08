@@ -6,9 +6,9 @@ from typing import Optional, Literal
 from pydantic import BaseModel
 
 
-# ---------------------------------------------------------------------------
+
 # Requests (faculty)
-# ---------------------------------------------------------------------------
+
 
 class CreateExamRequest(BaseModel):
     title: str
@@ -27,9 +27,7 @@ class SaveResultsRequest(BaseModel):
     results: list[ResultEntry]
 
 
-# ---------------------------------------------------------------------------
 # Responses (faculty)
-# ---------------------------------------------------------------------------
 
 class ExamListItem(BaseModel):
     id: int
@@ -71,9 +69,8 @@ class ExamRosterResponse(BaseModel):
     roster: list[ResultRosterItem]
 
 
-# ---------------------------------------------------------------------------
 # Responses (student)
-# ---------------------------------------------------------------------------
+
 
 class StudentExamResult(BaseModel):
     exam_id: int

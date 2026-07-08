@@ -1,7 +1,7 @@
 #Pydantic schemas for the faculty API.
 
 import uuid
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel
 
 
@@ -116,3 +116,20 @@ class AttendanceMark(BaseModel):
 class SaveAttendanceRequest(BaseModel):
     date: str               
     marks: list[AttendanceMark]
+
+class StudentAttendanceStat(BaseModel):
+    student_id: uuid.UUID
+    full_name: str
+    enrollment_no: str
+    present: int
+    total: int
+    percentage: float
+    status: Literal["safe" , "warning" , "critical"]
+
+
+class ClassAttendanceSummary(BaseModel):
+    class_id: int
+    total_sessions: int       
+    class_average: float    
+    at_risk_count: int         
+    students: list[StudentAttendanceStat]  

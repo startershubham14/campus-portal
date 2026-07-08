@@ -4,8 +4,10 @@ import {
   FaBell, FaHome, FaTachometerAlt, FaBook,
   FaBars, FaEllipsisV, FaChevronDown, FaFilePdf,
   FaUsers, FaSpinner, FaClipboardList, FaSignOutAlt,
-  FaUserCircle, FaUpload, FaCheckCircle, FaStar, FaFileAlt
+FaUserCircle, FaUpload, FaCheckCircle, FaStar, FaFileAlt,
+  FaCalendarCheck, FaExclamationTriangle, FaCheck
 } from "react-icons/fa";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
 
 interface Course {
@@ -95,6 +97,7 @@ const CARD_COLORS = [
 ];
 
 export default function StudentDashboard() {
+  const [view, setView] = useState<"courses" | "attendance">("courses");
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -190,26 +193,38 @@ export default function StudentDashboard() {
       <div className="bg-white border-b border-slate-200 flex justify-between items-center px-6 py-0 shadow-sm text-sm font-semibold text-slate-600 overflow-x-auto z-10">
         <div className="flex space-x-1 min-w-max">
           <button
-            onClick={() => setSelectedCourse(null)}
+            onClick={() => { setView("courses"); setSelectedCourse(null); }}
             className="flex items-center space-x-2 px-4 py-4 hover:bg-slate-50 hover:text-indigo-700 transition-colors"
           >
             <FaHome size={16} /> <span>Home</span>
           </button>
           <button
-            onClick={() => setSelectedCourse(null)}
+            onClick={() => { setView("courses"); setSelectedCourse(null); }}
             className={`flex items-center space-x-2 px-4 py-4 transition-colors ${
-              !selectedCourse
+              view === "courses"
                 ? "text-indigo-700 border-b-2 border-indigo-700"
                 : "hover:bg-slate-50 hover:text-indigo-700"
             }`}
           >
             <FaBook size={16} /> <span>My Courses</span>
           </button>
+          <button
+            onClick={() => { setView("attendance"); setSelectedCourse(null); }}
+            className={`flex items-center space-x-2 px-4 py-4 transition-colors ${
+              view === "attendance"
+                ? "text-indigo-700 border-b-2 border-indigo-700"
+                : "hover:bg-slate-50 hover:text-indigo-700"
+            }`}
+          >
+            <FaCalendarCheck size={16} /> <span>Attendance</span>
+          </button>
         </div>
       </div>
 
       <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
-        {!selectedCourse ? (
+        {view === "attendance" ? (
+          <AttendanceDashboard />
+        ) : !selectedCourse ? (
           <CourseOverview onSelectCourse={setSelectedCourse} />
         ) : (
           <CourseDetailView
@@ -704,3 +719,168 @@ export type GradeOut = {
   semester: number;
   percentage: number;
 };
+
+// Attendance dashboard
+
+interface SubjectSummary {
+  class_id: number;
+  class_code: string;
+  class_name: string;
+  total_sessions: number;
+  present: number;
+  absent: number;
+  percentage: number;
+  status: "safe" | "warning" | "critical";
+  message: string;
+}
+
+interface OverallSummary {
+  overall_percentage: number;
+  total_sessions: number;
+  total_present: number;
+  status: "safe" | "warning" | "critical";
+  subjects: SubjectSummary[];
+}
+
+// One consistent color language used everywhere on this dashboard
+const STATUS_COLORS = {
+  safe:     { text: "text-emerald-600", bg: "bg-emerald-50",  border: "border-emerald-200", ring: "#10b981", label: "Safe" },
+  warning:  { text: "text-amber-600",   bg: "bg-amber-50",    border: "border-amber-200",   ring: "#f59e0b", label: "Borderline" },
+  critical: { text: "text-rose-600",    bg: "bg-rose-50",     border: "border-rose-200",    ring: "#f43f5e", label: "At Risk" },
+};
+
+function AttendanceDashboard() {
+  const [data, setData] = useState<OverallSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch<OverallSummary>("/student/attendance/summary")
+      .then(setData)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-400 text-sm p-8">
+        <FaSpinner className="animate-spin" /> Loading attendance...
+      </div>
+    );
+  }
+  if (error) return <p className="p-8 text-red-500 text-sm">Failed to load: {error}</p>;
+  if (!data) return null;
+
+  const overall = STATUS_COLORS[data.status];
+
+  return (
+    <div className="space-y-6">
+      {/* Header explains what this page IS — so anyone landing here understands */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800">My Attendance</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          You need <span className="font-bold text-slate-700">75%</span> attendance in each subject to sit exams.
+          Green is safe, amber is borderline, red means you're at risk.
+        </p>
+      </div>
+
+      {/* Overall banner — the single most important number, big and colored */}
+      <div className={`rounded-2xl border ${overall.border} ${overall.bg} p-6 flex flex-col sm:flex-row items-center gap-6`}>
+        <div className="relative w-32 h-32 shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={[
+                  { value: data.overall_percentage },
+                  { value: 100 - data.overall_percentage },
+                ]}
+                dataKey="value"
+                innerRadius={48}
+                outerRadius={62}
+                startAngle={90}
+                endAngle={-270}
+                stroke="none"
+              >
+                <Cell fill={overall.ring} />
+                <Cell fill="#e2e8f0" />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className={`text-2xl font-extrabold ${overall.text}`}>
+              {data.overall_percentage}%
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Overall</span>
+          </div>
+        </div>
+
+        <div className="text-center sm:text-left">
+          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${overall.bg} ${overall.text} border ${overall.border} mb-2`}>
+            {data.status === "safe" ? <FaCheck size={10} /> : <FaExclamationTriangle size={10} />}
+            {overall.label}
+          </div>
+          <p className="text-sm text-slate-600">
+            You've attended <span className="font-bold text-slate-800">{data.total_present}</span> of{" "}
+            <span className="font-bold text-slate-800">{data.total_sessions}</span> total classes across all subjects.
+          </p>
+        </div>
+      </div>
+
+      {/* Per-subject cards */}
+      <div>
+        <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">By Subject</h2>
+        {data.subjects.length === 0 ? (
+          <p className="text-sm text-slate-400">You're not enrolled in any classes yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {data.subjects.map((s) => {
+              const c = STATUS_COLORS[s.status];
+              return (
+                <div key={s.class_id} className={`rounded-xl border ${c.border} bg-white p-5 flex items-center gap-5`}>
+                  <div className="relative w-20 h-20 shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { value: s.percentage },
+                            { value: 100 - s.percentage },
+                          ]}
+                          dataKey="value"
+                          innerRadius={28}
+                          outerRadius={38}
+                          startAngle={90}
+                          endAngle={-270}
+                          stroke="none"
+                        >
+                          <Cell fill={c.ring} />
+                          <Cell fill="#e2e8f0" />
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className={`text-sm font-extrabold ${c.text}`}>{s.percentage}%</span>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-xs font-bold text-indigo-600 font-mono">{s.class_code}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${c.bg} ${c.text}`}>
+                        {c.label}
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-800 leading-tight truncate">{s.class_name}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Present {s.present} / {s.total_sessions} classes
+                    </p>
+                    <p className={`text-xs font-medium mt-1.5 ${c.text}`}>{s.message}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

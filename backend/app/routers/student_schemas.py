@@ -2,7 +2,7 @@
 Pydantic schemas for the student API.
 """
 import uuid
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel
 
 
@@ -54,7 +54,7 @@ class SubmissionPresignResponse(BaseModel):
 
 
 class ConfirmSubmissionRequest(BaseModel):
-    object_key: str      # returned by the presign step
+    object_key: str    
 
 
 class CourseDetailOut(BaseModel):
@@ -69,10 +69,27 @@ class CourseDetailOut(BaseModel):
 
 class AttendanceOut(BaseModel):
     id: int
-    date: str           # ISO date string
+    date: str           
     subject: str
     is_present: bool
+class AttendanceSubjectSummary(BaseModel):
+    class_id: int
+    class_code: str
+    class_name: str
+    total_sessions: int       
+    present: int
+    absent: int
+    percentage: float           
+    status: Literal["safe" , "warning" , "critical"]             
+    message: str
 
+
+class AttendanceOverallSummary(BaseModel):
+    overall_percentage: float
+    total_sessions: int
+    total_present: int
+    status: Literal["safe", "warning", "critical"]
+    subjects: list[AttendanceSubjectSummary]
 
 class GradeOut(BaseModel):
     id: int
@@ -80,4 +97,4 @@ class GradeOut(BaseModel):
     marks_obtained: float
     total_marks: float
     semester: int
-    percentage: float   # computed by the API, not stored
+    percentage: float   

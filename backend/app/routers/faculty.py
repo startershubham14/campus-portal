@@ -18,6 +18,8 @@ from app.routers.faculty_schemas import (
     UploadMaterialRequest, LinkMaterialRequest, CreateAssignmentRequest,
     GradeSubmissionRequest, PresignRequest, PresignResponse,
     AttendanceRosterResponse, AttendanceRosterItem, SaveAttendanceRequest,
+    AttendanceRosterResponse, AttendanceRosterItem, SaveAttendanceRequest,
+    StudentAttendanceStat, ClassAttendanceSummary,
 )
 from app.routers.exam_schemas import (
     CreateExamRequest, SaveResultsRequest,
@@ -439,9 +441,7 @@ async def grade_submission(
     await db.commit()
     return {"message": "Submission graded"}
 
-# ---------------------------------------------------------------------------
 # Attendance — roster + bulk save
-# ---------------------------------------------------------------------------
 
 async def _verify_teaches_class(class_id: int, profile: FacultyProfile, db: AsyncSession):
     """Raise 403 unless this faculty member is assigned to the class."""
@@ -567,9 +567,7 @@ async def save_attendance(
     await db.commit()
     return {"message": "Attendance saved", "updated": updated, "created": created}
 
-# ===========================================================================
 # Exams — create, enter results, analytics
-# ===========================================================================
 
 async def _assert_owns_exam(exam_id: int, profile: FacultyProfile, db: AsyncSession) -> Exam:
     """Fetch the exam and ensure this faculty teaches its class."""
@@ -803,4 +801,80 @@ async def exam_analytics(
         pass_count=pass_count,
         fail_count=len(marks) - pass_count,
         distribution=distribution,
+    )
+
+# GET /faculty/courses/{class_id}/attendance/summary
+
+def _stat_status(pct: float) -> str:
+    if pct >= 85:
+        return "safe"
+    if pct >= 75:
+        return "warning"
+    return "critical"
+
+
+@router.get(
+    "/courses/{class_id}/attendance/summary",
+    response_model=ClassAttendanceSummary,
+)
+async def class_attendance_summary(
+    class_id: int,
+    profile: FacultyProfile = Depends(get_faculty_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    
+    await _verify_teaches_class(class_id, profile, db)
+
+    cls_result = await db.execute(
+        select(ClassGroup)
+        .where(ClassGroup.id == class_id)
+        .options(selectinload(ClassGroup.students))
+    )
+    cls = cls_result.scalars().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    att_result = await db.execute(
+        select(Attendance).where(Attendance.class_id == class_id)
+    )
+    rows = att_result.scalars().all()
+
+    # Distinct session dates (the denominator)
+    session_dates = {r.date for r in rows}
+    total_sessions = len(session_dates)
+
+    present_by_student: dict = {}
+    for r in rows:
+        if r.is_present:
+            present_by_student[r.student_id] = present_by_student.get(r.student_id, 0) + 1
+
+    students: list[StudentAttendanceStat] = []
+    for s in cls.students:
+        present = present_by_student.get(s.id, 0)
+        pct = round(present / total_sessions * 100, 1) if total_sessions else 0.0
+        students.append(StudentAttendanceStat(
+            student_id=s.id,
+            full_name=s.full_name,
+            enrollment_no=s.enrollment_no,
+            present=present,
+            total=total_sessions,
+            percentage=pct,
+            status=_stat_status(pct),
+        ))
+
+    # Sort worst-first so at-risk students are at the top
+    students.sort(key=lambda x: x.percentage)
+
+    class_average = (
+        round(sum(s.percentage for s in students) / len(students), 1)
+        if students else 0.0
+    )
+    at_risk_count = sum(1 for s in students if s.percentage < 75)
+
+    return ClassAttendanceSummary(
+        class_id=class_id,
+        total_sessions=total_sessions,
+        class_average=class_average,
+        at_risk_count=at_risk_count,
+        students=students,
     )
