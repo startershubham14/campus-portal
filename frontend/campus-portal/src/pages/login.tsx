@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { authService } from "../services/authService";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -15,27 +16,11 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-        // "include" tells the browser to store the httpOnly cookie
-        // the server sends back. Without this, the cookie is ignored.
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Invalid email or password");
-      }
-
-      const data = await response.json();
+      const data = await authService.login(email, password);
 
       // The token is now securely in an httpOnly cookie — we never touch it.
-      // We only use the role from the response body to decide where to redirect.
-      // This role is NOT stored anywhere on the client; the next verification
-      // always comes from the server via /auth/me.
+      // We only use the returned role to decide where to redirect; it's not
+      // stored on the client. The next verification comes from /auth/me.
       if (data.role === "student") navigate("/student");
       else if (data.role === "faculty") navigate("/faculty");
       else if (data.role === "admin") navigate("/admin");

@@ -6,81 +6,18 @@ import {
   FaToggleOn, FaToggleOff, FaSpinner, FaTimes, FaUserShield,
   FaTrash, FaArrowLeft
 } from "react-icons/fa";
-import { useAuthGuard, logout } from "../hooks/useAuthGuard"
-
-interface Stats {
-  total_students: number;
-  total_faculty: number;
-  total_admins: number;
-  active_users: number;
-  inactive_users: number;
-}
-
-interface UserProfile {
-  full_name: string;
-  enrollment_no?: string;  // students
-  employee_id?: string;    // faculty
-  department: string;
-  current_semester?: number;
-}
-
-interface AdminUser {
-  id: string;
-  email: string;
-  role: string;
-  is_active: boolean;
-  profile: UserProfile | null;
-}
-
+import { useAuthGuard, logout } from "../hooks/useAuthGuard";
+import { adminService } from "../services/adminService";
+import type {
+  Stats, AdminUser, ClassOut, ClassDetail, Role,
+} from "../services/types";
 
 interface CreateUserModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
 
-
-interface ClassOut {
-  id: number;
-  code: string;
-  name: string;
-  department: string;
-  semester: number;
-  student_count: number;
-  faculty_count: number;
-}
-
-interface PersonInClass {
-  user_id: string;
-  full_name: string;
-  enrollment_no?: string;   // students
-  employee_id?: string;     // faculty
-  department: string;
-  current_semester?: number;
-}
-
-interface ClassDetail extends ClassOut {
-  faculty: PersonInClass[];
-  students: PersonInClass[];
-}
-
-
-type UserRole = "student" | "faculty" | "admin";
-
-
-const API = import.meta.env.VITE_API_URL;
-
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail ?? "Request failed");
-  }
-  return res.json();
-}
+type UserRole = Role;
 
 
 export default function AdminDashboard() {
@@ -174,7 +111,7 @@ function OverviewTab() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch("/admin/stats")
+    adminService.getStats()
       .then(setStats)
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -238,9 +175,7 @@ function UsersTab() {
     setFetching(true);
     setError("");
     try {
-      const params = new URLSearchParams({ role });
-      if (search) params.set("search", search);
-      const data = await apiFetch(`/admin/users?${params}`);
+      const data = await adminService.listUsers({ role: role as Role, search });
       setUsers(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load users");
@@ -260,7 +195,7 @@ function UsersTab() {
   const handleToggleActive = async (userId: string) => {
     setTogglingId(userId);
     try {
-      const res = await apiFetch(`/admin/users/${userId}/toggle-active`, { method: "PATCH" });
+      const res = await adminService.toggleUserActive(userId);
       // Update in-place so the whole list doesn't re-fetch
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, is_active: res.is_active } : u))
@@ -425,17 +360,14 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
     setSubmitting(true);
     setError("");
     try {
-      await apiFetch("/admin/users", {
-        method: "POST",
-        body: JSON.stringify({
-          email: form.email,
-          password: form.password,
-          role: form.role,
-          full_name: form.full_name,
-          // Send only if filled; server auto-generates if empty
-          enrollment_no: form.enrollment_no || undefined,
-          employee_id: form.employee_id || undefined,
-        }),
+      await adminService.createUser({
+        email: form.email,
+        password: form.password,
+        role: form.role,
+        full_name: form.full_name,
+        // Send only if filled; server auto-generates if empty
+        enrollment_no: form.enrollment_no || undefined,
+        employee_id: form.employee_id || undefined,
       });
       onSuccess();
     } catch (e: unknown) {
@@ -536,7 +468,7 @@ function ClassesTab() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch<ClassOut[]>("/admin/classes");
+      const data = await adminService.listClasses();
       setClasses(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load classes");
@@ -550,7 +482,7 @@ function ClassesTab() {
   const handleDelete = async (classId: number) => {
     if (!confirm("Delete this class? This will unenroll all students and remove all faculty assignments.")) return;
     try {
-      await apiFetch(`/admin/classes/${classId}`, { method: "DELETE" });
+      await adminService.deleteClass(classId);
       setClasses((prev) => prev.filter((c) => c.id !== classId));
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Delete failed");
@@ -655,9 +587,11 @@ function CreateClassModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     setSubmitting(true);
     setError("");
     try {
-      await apiFetch("/admin/classes", {
-        method: "POST",
-        body: JSON.stringify({ ...form, semester: parseInt(form.semester) }),
+      await adminService.createClass({
+        code: form.code,
+        name: form.name,
+        department: form.department,
+        semester: parseInt(form.semester),
       });
       onSuccess();
     } catch (e: unknown) {
@@ -729,14 +663,14 @@ function ClassManagePanel({ classInfo, onBack }: { classInfo: ClassOut; onBack: 
   const [detail, setDetail] = useState<ClassDetail | null>(null);
   const [activeTab, setActiveTab] = useState<ManageTab>("faculty");
   const [loading, setLoading] = useState(true);
-  const [allUsers, setAllUsers] = useState<UserListItem[]>([]);
+  const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
   const [search, setSearch] = useState("");
   const [acting, setActing] = useState<string | null>(null);
 
   const fetchDetail = async () => {
     setLoading(true);
     try {
-      const data = await apiFetch<ClassDetail>(`/admin/classes/${classInfo.id}`);
+      const data = await adminService.getClass(classInfo.id);
       setDetail(data);
     } catch (e: unknown) {
       console.error(e);
@@ -749,10 +683,8 @@ function ClassManagePanel({ classInfo, onBack }: { classInfo: ClassOut; onBack: 
 
   // Fetch available users when tab changes or search changes
   useEffect(() => {
-    const role = activeTab === "faculty" ? "faculty" : "student";
-    const params = new URLSearchParams({ role });
-    if (search) params.set("search", search);
-    apiFetch<UserListItem[]>(`/admin/users?${params}`)
+    const role: Role = activeTab === "faculty" ? "faculty" : "student";
+    adminService.listUsers({ role, search })
       .then(setAllUsers)
       .catch(() => {});
   }, [activeTab, search]);
@@ -763,11 +695,12 @@ function ClassManagePanel({ classInfo, onBack }: { classInfo: ClassOut; onBack: 
 
   const handleAssign = async (userId: string) => {
     setActing(userId);
-    const path = activeTab === "faculty"
-      ? `/admin/classes/${classInfo.id}/faculty/${userId}`
-      : `/admin/classes/${classInfo.id}/students/${userId}`;
     try {
-      await apiFetch(path, { method: "POST" });
+      if (activeTab === "faculty") {
+        await adminService.assignFaculty(classInfo.id, userId);
+      } else {
+        await adminService.enrollStudent(classInfo.id, userId);
+      }
       await fetchDetail();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Failed");
@@ -778,11 +711,12 @@ function ClassManagePanel({ classInfo, onBack }: { classInfo: ClassOut; onBack: 
 
   const handleRemove = async (userId: string) => {
     setActing(userId);
-    const path = activeTab === "faculty"
-      ? `/admin/classes/${classInfo.id}/faculty/${userId}`
-      : `/admin/classes/${classInfo.id}/students/${userId}`;
     try {
-      await apiFetch(path, { method: "DELETE" });
+      if (activeTab === "faculty") {
+        await adminService.removeFaculty(classInfo.id, userId);
+      } else {
+        await adminService.unenrollStudent(classInfo.id, userId);
+      }
       await fetchDetail();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Failed");
