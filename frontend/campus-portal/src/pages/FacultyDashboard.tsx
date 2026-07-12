@@ -6,7 +6,7 @@ import {
   FaPlus, FaUpload, FaCheckCircle, FaClipboardList,
   FaSpinner, FaTrash, FaSignOutAlt, FaUserCircle, FaStar,
 FaLink, FaExternalLinkAlt, FaCalendarAlt, FaCheck, FaTimes as FaX, FaSave,
-  FaExclamationTriangle, FaChartBar
+  FaExclamationTriangle, FaChartBar, FaGraduationCap, FaAward
 } from "react-icons/fa";
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
@@ -323,7 +323,7 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) =
   );
 }
 
-type DetailTab = "content" | "assignments" | "grading" | "attendance";
+type DetailTab = "content" | "assignments" | "grading" | "attendance" | "exams";
 
 function CourseDetailView({ course, onBack }: { course: Course; onBack: () => void }) {
   const [detail, setDetail] = useState<CourseDetail | null>(null);
@@ -352,6 +352,7 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
     { id: "assignments", label: "Assignments" },
     { id: "grading",     label: "Grading" },
     { id: "attendance",  label: "Attendance" },
+    { id: "exams",       label: "Exams" },
   ];
 
   return (
@@ -428,6 +429,9 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
             )}
             {activeTab === "attendance" && (
               <AttendanceTab courseId={course.id} />
+            )}
+            {activeTab === "exams" && (
+              <ExamsTab courseId={course.id} courseCode={course.code} />
             )}
           </div>
         )}
@@ -1424,6 +1428,554 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+// ---------------------------------------------------------------------------
+// Exams tab — create exams, enter marks, view class analytics
+// ---------------------------------------------------------------------------
+
+interface ExamListItem {
+  id: number;
+  title: string;
+  exam_type: string;
+  max_marks: number;
+  exam_date: string;
+  results_entered: number;
+  total_students: number;
+}
+
+interface ResultRosterItem {
+  student_id: string;
+  full_name: string;
+  enrollment_no: string;
+  marks_obtained: number | null;
+  remarks: string | null;
+}
+
+interface ExamAnalyticsData {
+  exam_id: number;
+  title: string;
+  max_marks: number;
+  total_students: number;
+  results_entered: number;
+  average: number | null;
+  highest: number | null;
+  lowest: number | null;
+  pass_count: number;
+  fail_count: number;
+  distribution: { bucket: string; count: number }[];
+}
+
+const EXAM_TYPE_LABELS: Record<string, string> = {
+  quiz: "Quiz",
+  midterm: "Midterm",
+  final: "Final",
+  assignment: "Assignment",
+};
+
+function ExamsTab({ courseId, courseCode }: { courseId: number; courseCode: string }) {
+  const [exams, setExams] = useState<ExamListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  // Which exam is open for entering marks / viewing analytics
+  const [activeExam, setActiveExam] = useState<ExamListItem | null>(null);
+
+  const fetchExams = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await apiFetch<ExamListItem[]>(`/faculty/courses/${courseId}/exams`);
+      setExams(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load exams");
+    } finally {
+      setLoading(false);
+    }
+  }, [courseId]);
+
+  useEffect(() => { fetchExams(); }, [fetchExams]);
+
+  const handleDelete = async (examId: number) => {
+    if (!confirm("Delete this exam and all its results?")) return;
+    try {
+      await apiFetch(`/faculty/exams/${examId}`, { method: "DELETE" });
+      setExams((prev) => prev.filter((e) => e.id !== examId));
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    }
+  };
+
+  // If an exam is open, show its detail panel instead of the list
+  if (activeExam) {
+    return (
+      <ExamDetailPanel
+        exam={activeExam}
+        onBack={() => { setActiveExam(null); fetchExams(); }}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800">Exams & Tests</h3>
+          <p className="text-xs text-slate-400">Create exams, enter marks, and view class performance.</p>
+        </div>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
+          <FaPlus size={12} /> New Exam
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
+          <FaSpinner className="animate-spin" /> Loading exams...
+        </div>
+      ) : error ? (
+        <p className="text-red-500 text-sm">{error}</p>
+      ) : exams.length === 0 ? (
+        <div className="text-center py-12 text-slate-400">
+          <FaGraduationCap size={32} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No exams yet. Create one to start entering marks.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {exams.map((exam) => {
+            const done = exam.results_entered >= exam.total_students && exam.total_students > 0;
+            return (
+              <div key={exam.id} className="border border-slate-200 rounded-xl p-5 bg-white hover:border-indigo-300 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">
+                        {EXAM_TYPE_LABELS[exam.exam_type] ?? exam.exam_type}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {new Date(exam.exam_date).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-800">{exam.title}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">Max marks: {exam.max_marks}</p>
+                  </div>
+                  <button
+                    onClick={() => handleDelete(exam.id)}
+                    className="text-slate-300 hover:text-rose-500 transition-colors"
+                    title="Delete exam"
+                  >
+                    <FaTrash size={12} />
+                  </button>
+                </div>
+
+                {/* Progress of marks entered */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs text-slate-500 font-medium mb-1">
+                    <span>Marks entered</span>
+                    <span>{exam.results_entered} / {exam.total_students}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${done ? "bg-emerald-500" : "bg-indigo-500"}`}
+                      style={{ width: `${exam.total_students ? (exam.results_entered / exam.total_students) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setActiveExam(exam)}
+                  className="w-full bg-indigo-50 text-indigo-700 py-2 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors"
+                >
+                  {done ? "View / Edit Results" : "Enter Marks"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showCreate && (
+        <CreateExamModal
+          courseId={courseId}
+          courseCode={courseCode}
+          onClose={() => setShowCreate(false)}
+          onSuccess={() => { setShowCreate(false); fetchExams(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// --- Create exam modal ------------------------------------------------------
+
+function CreateExamModal({
+  courseId,
+  courseCode,
+  onClose,
+  onSuccess,
+}: {
+  courseId: number;
+  courseCode: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const today = new Date().toISOString().split("T")[0];
+  const [form, setForm] = useState({
+    title: "",
+    exam_type: "quiz",
+    max_marks: "100",
+    exam_date: today,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!form.title.trim()) { setError("Title is required."); return; }
+    const max = parseFloat(form.max_marks);
+    if (isNaN(max) || max <= 0) { setError("Max marks must be a positive number."); return; }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      await apiFetch(`/faculty/courses/${courseId}/exams`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: form.title,
+          exam_type: form.exam_type,
+          max_marks: max,
+          exam_date: form.exam_date,
+        }),
+      });
+      onSuccess();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create exam");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-6 border-b border-slate-200">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">New Exam</h2>
+            <p className="text-xs text-slate-400">{courseCode}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><FaX size={18} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          {error && <p className="text-red-500 text-sm bg-red-50 border border-red-200 px-4 py-2 rounded-lg">{error}</p>}
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Exam Title</label>
+            <input
+              type="text"
+              placeholder="e.g. Unit Test 1"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Type</label>
+              <select
+                value={form.exam_type}
+                onChange={(e) => setForm((f) => ({ ...f, exam_type: e.target.value }))}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="quiz">Quiz</option>
+                <option value="midterm">Midterm</option>
+                <option value="final">Final</option>
+                <option value="assignment">Assignment</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Max Marks</label>
+              <input
+                type="number"
+                value={form.max_marks}
+                onChange={(e) => setForm((f) => ({ ...f, max_marks: e.target.value }))}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Exam Date</label>
+            <input
+              type="date"
+              value={form.exam_date}
+              onChange={(e) => setForm((f) => ({ ...f, exam_date: e.target.value }))}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 p-6 border-t border-slate-200">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 font-medium">Cancel</button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {submitting && <FaSpinner className="animate-spin" size={13} />}
+            {submitting ? "Creating..." : "Create Exam"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Exam detail: enter marks + analytics -----------------------------------
+
+function ExamDetailPanel({ exam, onBack }: { exam: ExamListItem; onBack: () => void }) {
+  const [mode, setMode] = useState<"marks" | "analytics">("marks");
+  const [roster, setRoster] = useState<ResultRosterItem[]>([]);
+  const [marks, setMarks] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [savedMsg, setSavedMsg] = useState("");
+
+  const fetchRoster = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    setSavedMsg("");
+    try {
+      const data = await apiFetch<{ roster: ResultRosterItem[] }>(`/faculty/exams/${exam.id}/roster`);
+      setRoster(data.roster);
+      // Pre-fill inputs with existing marks
+      const initial: Record<string, string> = {};
+      data.roster.forEach((r) => {
+        initial[r.student_id] = r.marks_obtained !== null ? String(r.marks_obtained) : "";
+      });
+      setMarks(initial);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to load roster");
+    } finally {
+      setLoading(false);
+    }
+  }, [exam.id]);
+
+  useEffect(() => { fetchRoster(); }, [fetchRoster]);
+
+  const handleSave = async () => {
+    // Build the results payload from filled-in marks only
+    const results = Object.entries(marks)
+      .filter(([, v]) => v.trim() !== "")
+      .map(([student_id, v]) => ({ student_id, marks_obtained: parseFloat(v) }));
+
+    // Client-side range check for a friendlier error than the server's 400
+    for (const r of results) {
+      if (isNaN(r.marks_obtained) || r.marks_obtained < 0 || r.marks_obtained > exam.max_marks) {
+        setError(`Marks must be between 0 and ${exam.max_marks}.`);
+        return;
+      }
+    }
+    if (results.length === 0) { setError("Enter at least one mark before saving."); return; }
+
+    setSaving(true);
+    setError("");
+    setSavedMsg("");
+    try {
+      await apiFetch(`/faculty/exams/${exam.id}/results`, {
+        method: "POST",
+        body: JSON.stringify({ results }),
+      });
+      setSavedMsg("Marks saved.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <button onClick={onBack} className="text-sm text-slate-500 hover:text-slate-800 flex items-center gap-1.5">
+          <FaHome size={13} /> Back to exams
+        </button>
+        <div className="border-l border-slate-200 pl-4">
+          <h3 className="text-base font-bold text-slate-800">{exam.title}</h3>
+          <p className="text-xs text-slate-400">Max marks: {exam.max_marks}</p>
+        </div>
+      </div>
+
+      {/* Mode toggle */}
+      <div className="flex gap-1 bg-slate-200/60 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setMode("marks")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            mode === "marks" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <FaClipboardList size={11} /> Enter Marks
+        </button>
+        <button
+          onClick={() => setMode("analytics")}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            mode === "analytics" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <FaChartBar size={11} /> Analytics
+        </button>
+      </div>
+
+      {mode === "marks" ? (
+        loading ? (
+          <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
+            <FaSpinner className="animate-spin" /> Loading roster...
+          </div>
+        ) : (
+          <>
+            {error && <p className="text-red-500 text-xs bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{error}</p>}
+            {savedMsg && <p className="text-emerald-600 text-xs bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg flex items-center gap-2"><FaCheckCircle size={12} /> {savedMsg}</p>}
+
+            <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+              {roster.map((s) => (
+                <div key={s.student_id} className="flex items-center justify-between p-3 hover:bg-slate-50 transition-colors">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{s.full_name}</p>
+                    <p className="text-xs text-slate-400 font-mono">{s.enrollment_no}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      placeholder="—"
+                      value={marks[s.student_id] ?? ""}
+                      onChange={(e) => setMarks((m) => ({ ...m, [s.student_id]: e.target.value }))}
+                      className="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs text-slate-400">/ {exam.max_marks}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
+              >
+                {saving ? <FaSpinner className="animate-spin" size={13} /> : <FaSave size={13} />}
+                {saving ? "Saving..." : "Save Marks"}
+              </button>
+            </div>
+          </>
+        )
+      ) : (
+        <ExamAnalyticsPanel examId={exam.id} maxMarks={exam.max_marks} />
+      )}
+    </div>
+  );
+}
+
+// --- Analytics panel --------------------------------------------------------
+
+function ExamAnalyticsPanel({ examId, maxMarks }: { examId: number; maxMarks: number }) {
+  const [data, setData] = useState<ExamAnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch<ExamAnalyticsData>(`/faculty/exams/${examId}/analytics`)
+      .then(setData)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [examId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-400 text-sm py-8">
+        <FaSpinner className="animate-spin" /> Loading analytics...
+      </div>
+    );
+  }
+  if (error) return <p className="text-red-500 text-sm">{error}</p>;
+  if (!data) return null;
+
+  if (data.results_entered === 0) {
+    return (
+      <div className="text-center py-12 text-slate-400">
+        <FaChartBar size={32} className="mx-auto mb-3 opacity-30" />
+        <p className="text-sm">No marks entered yet. Enter marks to see analytics.</p>
+      </div>
+    );
+  }
+
+  const avgPct = data.average !== null ? Math.round((data.average / maxMarks) * 100) : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-extrabold text-slate-800">{data.average ?? "—"}</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Average ({avgPct}%)</p>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-extrabold text-emerald-600">{data.highest ?? "—"}</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Highest</p>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-extrabold text-rose-500">{data.lowest ?? "—"}</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Lowest</p>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-extrabold text-slate-800">
+            {data.pass_count}<span className="text-slate-300">/</span>{data.pass_count + data.fail_count}
+          </p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Passed (≥40%)</p>
+        </div>
+      </div>
+
+      {/* Distribution histogram */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h3 className="text-sm font-bold text-slate-700 mb-1">Score Distribution</h3>
+        <p className="text-xs text-slate-400 mb-4">How many students scored in each range.</p>
+        <ResponsiveContainer width="100%" height={240}>
+          <BarChart data={data.distribution} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+            <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+            <Tooltip
+              formatter={(v: number) => [`${v} students`, "Count"]}
+              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+            />
+            <Bar dataKey="count" radius={[4, 4, 0, 0]} fill="#6366f1" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Pass/fail summary */}
+      <div className="flex gap-4">
+        <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+            <FaAward className="text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-xl font-extrabold text-emerald-700">{data.pass_count}</p>
+            <p className="text-xs text-emerald-600 font-medium">Passed</p>
+          </div>
+        </div>
+        <div className="flex-1 bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
+            <FaExclamationTriangle className="text-rose-600" />
+          </div>
+          <div>
+            <p className="text-xl font-extrabold text-rose-700">{data.fail_count}</p>
+            <p className="text-xs text-rose-600 font-medium">Failed</p>
+          </div>
+        </div>
       </div>
     </div>
   );

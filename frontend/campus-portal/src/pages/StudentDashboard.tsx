@@ -5,9 +5,9 @@ import {
   FaBars, FaEllipsisV, FaChevronDown, FaFilePdf,
   FaUsers, FaSpinner, FaClipboardList, FaSignOutAlt,
 FaUserCircle, FaUpload, FaCheckCircle, FaStar, FaFileAlt,
-  FaCalendarCheck, FaExclamationTriangle, FaCheck
+  FaCalendarCheck, FaExclamationTriangle, FaCheck, FaAward, FaTrophy
 } from "react-icons/fa";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
 
 interface Course {
@@ -97,7 +97,7 @@ const CARD_COLORS = [
 ];
 
 export default function StudentDashboard() {
-  const [view, setView] = useState<"courses" | "attendance">("courses");
+  const [view, setView] = useState<"courses" | "attendance" | "results">("courses");
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -218,12 +218,24 @@ export default function StudentDashboard() {
           >
             <FaCalendarCheck size={16} /> <span>Attendance</span>
           </button>
+          <button
+            onClick={() => { setView("results"); setSelectedCourse(null); }}
+            className={`flex items-center space-x-2 px-4 py-4 transition-colors ${
+              view === "results"
+                ? "text-indigo-700 border-b-2 border-indigo-700"
+                : "hover:bg-slate-50 hover:text-indigo-700"
+            }`}
+          >
+            <FaAward size={16} /> <span>Results</span>
+          </button>
         </div>
       </div>
 
       <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
         {view === "attendance" ? (
           <AttendanceDashboard />
+        ) : view === "results" ? (
+          <ResultsDashboard />
         ) : !selectedCourse ? (
           <CourseOverview onSelectCourse={setSelectedCourse} />
         ) : (
@@ -881,6 +893,204 @@ function AttendanceDashboard() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+// ---------------------------------------------------------------------------
+// Results dashboard — exam results with rank + class-average comparison
+// ---------------------------------------------------------------------------
+
+interface StudentResult {
+  exam_id: number;
+  title: string;
+  exam_type: string;
+  exam_date: string;
+  class_code: string;
+  class_name: string;
+  max_marks: number;
+  marks_obtained: number | null;
+  percentage: number | null;
+  remarks: string | null;
+  class_average: number | null;
+  rank: number | null;
+  total_ranked: number | null;
+}
+
+const EXAM_TYPE_LABEL: Record<string, string> = {
+  quiz: "Quiz",
+  midterm: "Midterm",
+  final: "Final",
+  assignment: "Assignment",
+};
+
+function ResultsDashboard() {
+  const [results, setResults] = useState<StudentResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch<StudentResult[]>("/student/results")
+      .then(setResults)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-400 text-sm p-8">
+        <FaSpinner className="animate-spin" /> Loading results...
+      </div>
+    );
+  }
+  if (error) return <p className="p-8 text-red-500 text-sm">Failed to load: {error}</p>;
+
+  // Only graded results (marks entered) for stats and the trend chart
+  const graded = results.filter((r) => r.marks_obtained !== null);
+
+  // Trend data: oldest → newest so the line reads left-to-right chronologically.
+  // Backend returns newest-first, so reverse a copy.
+  const trend = [...graded]
+    .reverse()
+    .map((r) => ({
+      name: r.title.length > 12 ? r.title.slice(0, 12) + "…" : r.title,
+      you: r.percentage,
+      average: r.class_average !== null ? Math.round((r.class_average / r.max_marks) * 100) : null,
+    }));
+
+  const avgPct = graded.length
+    ? Math.round(graded.reduce((sum, r) => sum + (r.percentage ?? 0), 0) / graded.length)
+    : 0;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800">My Results</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Your exam scores, how you compare to the class average, and your rank.
+        </p>
+      </div>
+
+      {results.length === 0 ? (
+        <div className="text-center py-16 text-slate-400">
+          <FaAward size={40} className="mx-auto mb-4 opacity-30" />
+          <p className="text-sm">No exams yet.</p>
+        </div>
+      ) : (
+        <>
+          {/* Overall snapshot */}
+          {graded.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white border border-slate-200 rounded-xl p-5 text-center">
+                <p className="text-3xl font-extrabold text-indigo-600">{avgPct}%</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">Your Average</p>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-5 text-center">
+                <p className="text-3xl font-extrabold text-slate-800">{graded.length}</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">Exams Graded</p>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-5 text-center">
+                <p className="text-3xl font-extrabold text-slate-800">{results.length - graded.length}</p>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">Awaiting Grades</p>
+              </div>
+            </div>
+          )}
+
+          {/* Trend chart — you vs class average over time */}
+          {trend.length >= 2 && (
+            <div className="bg-white border border-slate-200 rounded-xl p-5">
+              <h3 className="text-sm font-bold text-slate-700 mb-1">Performance Over Time</h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Your score (%) vs class average across exams.
+              </p>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={trend} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                  <Line type="monotone" dataKey="you" name="You" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="average" name="Class avg" stroke="#94a3b8" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Per-exam cards */}
+          <div>
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">All Exams</h2>
+            <div className="space-y-3">
+              {results.map((r) => {
+                const graded = r.marks_obtained !== null;
+                const pct = r.percentage ?? 0;
+                const beatAvg =
+                  graded && r.class_average !== null && r.marks_obtained! >= r.class_average;
+                const scoreColor = !graded ? "text-slate-400"
+                  : pct >= 75 ? "text-emerald-600"
+                  : pct >= 40 ? "text-amber-600"
+                  : "text-rose-600";
+
+                return (
+                  <div key={r.exam_id} className="bg-white border border-slate-200 rounded-xl p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">
+                            {EXAM_TYPE_LABEL[r.exam_type] ?? r.exam_type}
+                          </span>
+                          <span className="text-xs text-indigo-600 font-mono font-bold">{r.class_code}</span>
+                        </div>
+                        <p className="text-sm font-bold text-slate-800">{r.title}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {r.class_name} · {new Date(r.exam_date).toLocaleDateString()}
+                        </p>
+                      </div>
+
+                      {/* Score */}
+                      <div className="text-right shrink-0">
+                        {graded ? (
+                          <>
+                            <p className={`text-2xl font-extrabold ${scoreColor}`}>
+                              {r.marks_obtained}<span className="text-slate-300 text-lg">/{r.max_marks}</span>
+                            </p>
+                            <p className={`text-xs font-bold ${scoreColor}`}>{r.percentage}%</p>
+                          </>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+                            Not graded
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Comparison row — only when graded */}
+                    {graded && (
+                      <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+                        {r.rank !== null && r.total_ranked !== null && (
+                          <span className="flex items-center gap-1.5 text-slate-600">
+                            <FaTrophy size={11} className={r.rank <= 3 ? "text-amber-500" : "text-slate-400"} />
+                            Rank <span className="font-bold text-slate-800">{r.rank}</span> of {r.total_ranked}
+                          </span>
+                        )}
+                        {r.class_average !== null && (
+                          <span className="text-slate-600">
+                            Class avg: <span className="font-bold text-slate-800">{r.class_average}</span>
+                            <span className={`ml-1.5 font-bold ${beatAvg ? "text-emerald-600" : "text-rose-500"}`}>
+                              ({beatAvg ? "above" : "below"} average)
+                            </span>
+                          </span>
+                        )}
+                        {r.remarks && (
+                          <span className="text-slate-500 italic">"{r.remarks}"</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
