@@ -4,20 +4,7 @@ A full-stack college management system with role-based access for **admins**, **
 
 Built with **FastAPI** (async Python) and **React + TypeScript**, backed by **PostgreSQL** and **AWS S3**.
 
----
 
-## Table of Contents
-
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Security Design](#security-design)
-- [Getting Started](#getting-started)
-- [Project Structure](#project-structure)
-- [API Overview](#api-overview)
-- [Notable Engineering Decisions](#notable-engineering-decisions)
-
----
 
 ## Getting Started
 
