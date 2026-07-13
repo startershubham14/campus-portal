@@ -10,79 +10,16 @@ FaLink, FaExternalLinkAlt, FaCalendarAlt, FaCheck, FaTimes as FaX, FaSave,
 } from "react-icons/fa";
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
-
-// Types matching faculty API schemas
-
-interface FacultyProfile {
-  id: string;
-  full_name: string;
-  employee_id: string;
-  department: string;
-}
-
-interface Course {
-  id: number;
-  code: string;
-  name: string;
-  department: string;
-  semester: number;
-  student_count: number;
-}
-
-interface Material {
-  id: number;
-  title: string;
-  file_url: string;
-  source_type: "upload" | "link";
-  uploaded_at: string | null;
-}
-
-interface Assignment {
-  id: number;
-  title: string;
-  description: string | null;
-  due_date: string;
-  submission_count: number;
-}
-
-interface CourseDetail extends Course {
-  materials: Material[];
-  assignments: Assignment[];
-}
-
-interface Submission {
-  id: number;
-  student_name: string;
-  enrollment_no: string;
-  file_url: string;
-  submitted_at: string | null;
-  marks_awarded: number | null;
-  feedback: string | null;
-}
-
-interface RosterItem {
-  student_id: string;
-  full_name: string;
-  enrollment_no: string;
-  is_present: boolean | null;
-}
-
-
-
-const API = import.meta.env.VITE_API_URL;
-
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail ?? "Request failed");
-  }
-  return res.json() as Promise<T>;
-}
+import { facultyService } from "../services/facultyService";
+import type {
+  FacultyProfile,
+  FacultyCourse as Course,
+  FacultyMaterial as Material,
+  FacultyAssignment as Assignment,
+  FacultyCourseDetail as CourseDetail,
+  FacultySubmission as Submission,
+  AttendanceRosterItem as RosterItem,
+} from "../services/types";
 
 const CARD_COLORS = [
   "from-indigo-500 to-purple-600",
@@ -103,7 +40,7 @@ export default function FacultyDashboard() {
 
   useEffect(() => {
     if (!loading && user) {
-      apiFetch<FacultyProfile>("/faculty/profile")
+      facultyService.getProfile()
         .then(setProfile)
         .catch(() => {});
     }
@@ -227,7 +164,7 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) =
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch<Course[]>("/faculty/courses")
+    facultyService.listCourses()
       .then((data) => { setCourses(data); setFiltered(data); })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -336,7 +273,7 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch<CourseDetail>(`/faculty/courses/${course.id}`);
+      const data = await facultyService.getCourseDetail(course.id);
       setDetail(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load class");
@@ -440,25 +377,6 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
   );
 }
 
-function getMimeType(filename: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    pdf:  "application/pdf",
-    doc:  "application/msword",
-    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ppt:  "application/vnd.ms-powerpoint",
-    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    xls:  "application/vnd.ms-excel",
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    zip:  "application/zip",
-    txt:  "text/plain",
-    png:  "image/png",
-    jpg:  "image/jpeg",
-    jpeg: "image/jpeg",
-  };
-  return map[ext] ?? "application/octet-stream";
-}
-
 // Upload state type for tracking multi-step progress
 type UploadStatus = "idle" | "uploading_to_s3" | "saving" | "done";
 
@@ -496,10 +414,7 @@ function ContentTab({
     setAddingLink(true);
     setError("");
     try {
-      await apiFetch(`/faculty/courses/${courseId}/materials/link`, {
-        method: "POST",
-        body: JSON.stringify({ title, url: linkUrl }),
-      });
+      await facultyService.addLinkMaterial(courseId, title, linkUrl);
       setTitle("");
       setLinkUrl("");
       onMutate();
@@ -519,40 +434,19 @@ function ContentTab({
     setUploadProgress(0);
 
     try {
-      // Step 1: get presigned URL from our server
+      // The service encapsulates the full 3-step flow: presign → S3 PUT → confirm.
+      // We drive the status labels around it and pass a progress callback.
       setUploadStatus("uploading_to_s3");
-      const { presigned_url, object_key } = await apiFetch<{
-        presigned_url: string;
-        object_key: string;
-      }>(`/faculty/courses/${courseId}/materials/presign`, {
-        method: "POST",
-          body: JSON.stringify({
-          filename: file.name,
-          content_type: getMimeType(file.name),
-          class_code: courseCode,
-        }),
-      });
-
-      // Step 2: PUT file directly to S3 using the presigned URL.
-      // This does NOT go through apiFetch — S3 expects no Authorization header
-      // and no Content-Type: application/json. Use raw fetch.
-      const s3Res = await fetch(presigned_url, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": getMimeType(file.name) },
-      });
-
-      if (!s3Res.ok) {
-        throw new Error(`S3 upload failed: ${s3Res.status} ${s3Res.statusText}`);
-      }
-      setUploadProgress(100);
-
-      // Step 3: tell our server the upload succeeded — saves to DB
-      setUploadStatus("saving");
-      await apiFetch(`/faculty/courses/${courseId}/materials/confirm`, {
-        method: "POST",
-        body: JSON.stringify({ title, object_key }),
-      });
+      await facultyService.uploadMaterial(
+        courseId,
+        courseCode,
+        title,
+        file,
+        (percent) => {
+          setUploadProgress(percent);
+          if (percent >= 100) setUploadStatus("saving");
+        }
+      );
 
       setTitle("");
       setFile(null);
@@ -568,7 +462,7 @@ function ContentTab({
   const handleDelete = async (materialId: number) => {
     setDeletingId(materialId);
     try {
-      await apiFetch(`/faculty/materials/${materialId}`, { method: "DELETE" });
+      await facultyService.deleteMaterial(materialId);
       onMutate();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Delete failed");
@@ -772,9 +666,10 @@ function AssignmentsTab({
     setCreating(true);
     setError("");
     try {
-      await apiFetch(`/faculty/courses/${courseId}/assignments`, {
-        method: "POST",
-        body: JSON.stringify({ title, description: description || null, due_date: dueDate }),
+      await facultyService.createAssignment(courseId, {
+        title,
+        description: description || null,
+        due_date: dueDate,
       });
       setTitle(""); setDescription(""); setDueDate("");
       onMutate();
@@ -895,7 +790,7 @@ function GradingTab({
     if (!assignmentId) return;
     setLoading(true);
     setError("");
-    apiFetch<Submission[]>(`/faculty/assignments/${assignmentId}/submissions`)
+    facultyService.listSubmissions(assignmentId)
       .then(setSubmissions)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -905,10 +800,7 @@ function GradingTab({
     const marks = parseFloat(gradeForm.marks);
     if (isNaN(marks)) { alert("Enter a valid marks number."); return; }
     try {
-      await apiFetch(`/faculty/submissions/${submissionId}/grade`, {
-        method: "PATCH",
-        body: JSON.stringify({ marks_awarded: marks, feedback: gradeForm.feedback || null }),
-      });
+      await facultyService.gradeSubmission(submissionId, marks, gradeForm.feedback || null);
       // Update in-place
       setSubmissions((prev) =>
         prev.map((s) =>
@@ -1103,9 +995,7 @@ function AttendanceMarkPanel({ courseId }: { courseId: number }) {
     setError("");
     setSavedMsg("");
     try {
-      const data = await apiFetch<{ roster: RosterItem[] }>(
-        `/faculty/courses/${courseId}/attendance?date=${date}`
-      );
+      const data = await facultyService.getAttendanceRoster(courseId, date);
       setRoster(data.roster);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load roster");
@@ -1140,10 +1030,7 @@ function AttendanceMarkPanel({ courseId }: { courseId: number }) {
     setError("");
     setSavedMsg("");
     try {
-      await apiFetch(`/faculty/courses/${courseId}/attendance`, {
-        method: "POST",
-        body: JSON.stringify({ date, marks }),
-      });
+      await facultyService.saveAttendance(courseId, date, marks);
       setSavedMsg(`Attendance saved for ${new Date(date).toLocaleDateString()}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -1326,7 +1213,7 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch<ClassSummary>(`/faculty/courses/${courseId}/attendance/summary`)
+    facultyService.getAttendanceSummary(courseId)
       .then(setData)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -1487,7 +1374,7 @@ function ExamsTab({ courseId, courseCode }: { courseId: number; courseCode: stri
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch<ExamListItem[]>(`/faculty/courses/${courseId}/exams`);
+      const data = await facultyService.listExams(courseId);
       setExams(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load exams");
@@ -1501,7 +1388,7 @@ function ExamsTab({ courseId, courseCode }: { courseId: number; courseCode: stri
   const handleDelete = async (examId: number) => {
     if (!confirm("Delete this exam and all its results?")) return;
     try {
-      await apiFetch(`/faculty/exams/${examId}`, { method: "DELETE" });
+      await facultyService.deleteExam(examId);
       setExams((prev) => prev.filter((e) => e.id !== examId));
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Delete failed");
@@ -1641,14 +1528,11 @@ function CreateExamModal({
     setSubmitting(true);
     setError("");
     try {
-      await apiFetch(`/faculty/courses/${courseId}/exams`, {
-        method: "POST",
-        body: JSON.stringify({
-          title: form.title,
-          exam_type: form.exam_type,
-          max_marks: max,
-          exam_date: form.exam_date,
-        }),
+      await facultyService.createExam(courseId, {
+        title: form.title,
+        exam_type: form.exam_type,
+        max_marks: max,
+        exam_date: form.exam_date,
       });
       onSuccess();
     } catch (e: unknown) {
@@ -1749,7 +1633,7 @@ function ExamDetailPanel({ exam, onBack }: { exam: ExamListItem; onBack: () => v
     setError("");
     setSavedMsg("");
     try {
-      const data = await apiFetch<{ roster: ResultRosterItem[] }>(`/faculty/exams/${exam.id}/roster`);
+      const data = await facultyService.getExamRoster(exam.id);
       setRoster(data.roster);
       // Pre-fill inputs with existing marks
       const initial: Record<string, string> = {};
@@ -1785,10 +1669,7 @@ function ExamDetailPanel({ exam, onBack }: { exam: ExamListItem; onBack: () => v
     setError("");
     setSavedMsg("");
     try {
-      await apiFetch(`/faculty/exams/${exam.id}/results`, {
-        method: "POST",
-        body: JSON.stringify({ results }),
-      });
+      await facultyService.saveExamResults(exam.id, results);
       setSavedMsg("Marks saved.");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -1888,7 +1769,7 @@ function ExamAnalyticsPanel({ examId, maxMarks }: { examId: number; maxMarks: nu
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch<ExamAnalyticsData>(`/faculty/exams/${examId}/analytics`)
+    facultyService.getExamAnalytics(examId)
       .then(setData)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
