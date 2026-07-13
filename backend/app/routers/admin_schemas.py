@@ -36,7 +36,7 @@ class StatsResponse(BaseModel):
   active_users:int
   inactive_users:int
 
-# Request schemas — what the API receives on request like post.
+# Request schemas - what the API receives on request like post.
 
 class UpdateUser(BaseModel):
   full_name:Optional[str]=None

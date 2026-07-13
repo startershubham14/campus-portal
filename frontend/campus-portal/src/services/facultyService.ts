@@ -62,7 +62,7 @@ export const facultyService = {
   /**
    * Full S3 upload flow in one call:
    *   1. ask our backend for a presigned PUT URL
-   *   2. upload the file bytes directly to S3 (bypasses our auth instance —
+   *   2. upload the file bytes directly to S3 (bypasses our auth instance -
    *      S3 rejects requests that carry the auth cookie or JSON content-type)
    *   3. tell our backend the upload succeeded so it saves the record
    * onProgress (0-100) is optional, driven by the S3 upload step.
@@ -83,7 +83,7 @@ export const facultyService = {
     );
     const { presigned_url, object_key } = presignRes.data;
 
-    // Step 2: raw PUT to S3 — bare axios, NOT the `api` instance
+    // Step 2: raw PUT to S3 - bare axios, NOT the `api` instance
     await axios.put(presigned_url, file, {
       headers: { "Content-Type": contentType },
       onUploadProgress: (e) => {

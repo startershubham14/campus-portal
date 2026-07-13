@@ -23,7 +23,7 @@ async def _generate_enrollment_no(db: AsyncSession) -> str:
     """
     Sequential, human-readable student ID: STU00001, STU00002, ...
     Based on current row count + 1. Not strictly gap-free if a student
-    is later deleted, but that's fine for an enrollment number — it
+    is later deleted, but that's fine for an enrollment number - it
     only needs to be unique, not perfectly contiguous.
     """
     result = await db.execute(select(func.count()).select_from(StudentProfile))
@@ -57,7 +57,7 @@ def build_profile_dict( user : User) -> dict | None:
     return None #admin have no profile
 
 
-# POST /admin/users — manual user creation (admins only)
+# POST /admin/users - manual user creation (admins only)
 
 @router.post("/users",status_code=201)
 async def create_user(
@@ -66,7 +66,7 @@ async def create_user(
     # This is the actual access control: require_admin decodes the
     # httpOnly cookie, verifies the JWT, and checks current_user.role
     # == "admin" server-side. There is no client-supplied "role" check
-    # anywhere here — an unauthenticated or non-admin request never
+    # anywhere here - an unauthenticated or non-admin request never
     # reaches the body of this function at all.
     _admin: User = Depends(require_admin),
 ):
@@ -103,7 +103,7 @@ async def create_user(
             full_name=user_data.full_name,
             department="General",
         ))
-    # role == "admin" needs no profile row — admins aren't students or faculty
+    # role == "admin" needs no profile row - admins aren't students or faculty
 
     try:
         await db.commit()
@@ -114,21 +114,21 @@ async def create_user(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="ID collision — please retry",
+            detail="ID collision - please retry",
         )
 
     return {"message": f"Successfully created {user_data.role} account: {user_data.email}"}
 
-# GET /admin/users — the big list endpoint
+# GET /admin/users - the big list endpoint
 # this get endpoint helps query the user of single role 
 
 @router.get("/users", response_model=list[UserListItem])
 async def list_users(
-    # role is REQUIRED — the request must have one type to avoid
+    # role is REQUIRED - the request must have one type to avoid
     # returning thousands of mixed rows and slow joins
     role: Literal["student", "faculty", "admin"] = Query(
         ...,
-        description="Filter by role. Required — pick one of: student, faculty, admin."
+        description="Filter by role. Required - pick one of: student, faculty, admin."
     ),
     # optional: narrow further by active status
     active: bool | None = Query(
@@ -205,7 +205,7 @@ async def list_users(
         for u in users
     ]
 
-# GET /admin/users/{user_id} — single user detail
+# GET /admin/users/{user_id} - single user detail
 
 @router.get("/users/{user_id}", response_model=UserListItem)
 async def get_user(
@@ -240,7 +240,7 @@ async def get_user(
         profile=build_profile_dict(user),
     )
 
-# PATCH /admin/users/{user_id} — update profile fields
+# PATCH /admin/users/{user_id} - update profile fields
 
 @router.patch("/users/{user_id}")
 async def update_user(
@@ -296,7 +296,7 @@ async def update_user(
     await db.commit()
     return {"message": "User updated successfully"}
 
-# PATCH /admin/users/{user_id}/toggle-active — soft delete / reactivate
+# PATCH /admin/users/{user_id}/toggle-active - soft delete / reactivate
 @router.patch("/users/{user_id}/toggle-active")
 async def toggle_active(
     user_id: str,
@@ -307,7 +307,7 @@ async def toggle_active(
     Deactivates an active user, or reactivates an inactive one.
     A deactivated user's cookie is still technically valid until it
     expires, but get_current_user checks is_active on every request
-    and returns 401 — so the effect is immediate.
+    and returns 401 - so the effect is immediate.
     """
     import uuid
 
@@ -321,7 +321,7 @@ async def toggle_active(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Prevent an admin from deactivating their own account —
+    # Prevent an admin from deactivating their own account -
     # they'd be locked out immediately with no way back in
     if str(user.id) == str(_admin.id):
         raise HTTPException(
@@ -335,7 +335,7 @@ async def toggle_active(
     status = "activated" if user.is_active else "deactivated"
     return {"message": f"User {status} successfully", "is_active": user.is_active}
 
-# GET /admin/stats — dashboard overview counts
+# GET /admin/stats - dashboard overview counts
 
 
 @router.get("/stats", response_model=StatsResponse)
@@ -347,7 +347,7 @@ async def get_stats(
     Aggregate counts for the admin dashboard overview cards.
     All in a single round-trip using subqueries.
     """
-    # Count per role using conditional aggregation — one query, one round-trip
+    # Count per role using conditional aggregation - one query, one round-trip
     result = await db.execute(
         select(
             func.count().filter(User.role == "student").label("total_students"),

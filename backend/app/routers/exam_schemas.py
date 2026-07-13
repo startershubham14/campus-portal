@@ -1,5 +1,5 @@
 """
-Pydantic schemas for the exams feature — shared by faculty and student routers.
+Pydantic schemas for the exams feature - shared by faculty and student routers.
 """
 import uuid
 from typing import Optional, Literal

@@ -22,7 +22,7 @@ faculty_class_association = Table(
 class User(Base):
     __tablename__ = "users"
 
-    # UUID primary key — prevents account enumeration via sequential IDs.
+    # UUID primary key - prevents account enumeration via sequential IDs.
     # default=uuid.uuid4 generates it in Python before insert; the DB
     # column itself is PostgreSQL's native UUID type.
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
@@ -65,12 +65,12 @@ class FacultyProfile(Base):
     materials = relationship("CourseMaterial", back_populates="faculty")
     assignments = relationship("Assignment", back_populates="faculty")
 
-#  dashboard metrics  — kept as Integer PKs since they're not yet
+#  dashboard metrics  - kept as Integer PKs since they're not yet
 #  exposed via any route; convert to UUID later if you build endpoints
 #  that expose these IDs externally.
 class Attendance(Base):
     __tablename__ = "attendance"
-    # One attendance record per student per class per date — prevents
+    # One attendance record per student per class per date - prevents
     # duplicate rows when faculty re-saves attendance for the same day.
     __table_args__ = (
         UniqueConstraint("student_id", "class_id", "date", name="uq_attendance_student_class_date"),
@@ -157,7 +157,7 @@ class Submission(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     file_url = Column(String, nullable=False)
-    # S3 object key — lets us regenerate presigned view URLs (they expire in 7 days)
+    # S3 object key - lets us regenerate presigned view URLs (they expire in 7 days)
     # and delete the file if a student re-submits.
     object_key = Column(String, nullable=True)
     submitted_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -177,7 +177,7 @@ class Exam(Base):
     class_id = Column(Integer, ForeignKey("class_groups.id", ondelete="CASCADE"), nullable=False)
     faculty_id = Column(UUID(as_uuid=True), ForeignKey("faculty_profiles.id", ondelete="SET NULL"), nullable=True)
     title = Column(String, nullable=False)
-    # "quiz" | "midterm" | "final" | "assignment" — validated at the schema layer
+    # "quiz" | "midterm" | "final" | "assignment" - validated at the schema layer
     exam_type = Column(String, nullable=False, default="quiz")
     max_marks = Column(Float, nullable=False)
     exam_date = Column(Date, nullable=False)
@@ -189,7 +189,7 @@ class Exam(Base):
 
 class ExamResult(Base):
     __tablename__ = "exam_results"
-    # One result per student per exam — re-entering marks updates, never duplicates
+    # One result per student per exam - re-entering marks updates, never duplicates
     __table_args__ = (
         UniqueConstraint("exam_id", "student_id", name="uq_exam_result_exam_student"),
     )

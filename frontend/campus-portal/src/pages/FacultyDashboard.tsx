@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  FaBell, FaHome, FaTachometerAlt, FaBook, FaBars,
-  FaEllipsisV, FaChevronDown, FaFilePdf, FaUsers,
+  FaHome, FaBook,
+  FaEllipsisV, FaFilePdf, FaUsers,
   FaPlus, FaUpload, FaCheckCircle, FaClipboardList,
-  FaSpinner, FaTrash, FaSignOutAlt, FaUserCircle, FaStar,
+  FaSpinner, FaTrash, FaSignOutAlt, FaStar,
 FaLink, FaExternalLinkAlt, FaCalendarAlt, FaCheck, FaTimes as FaX, FaSave,
   FaExclamationTriangle, FaChartBar, FaGraduationCap, FaAward
 } from "react-icons/fa";
@@ -34,7 +34,6 @@ const CARD_COLORS = [
 export default function FacultyDashboard() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [profile, setProfile] = useState<FacultyProfile | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
   const navigate = useNavigate();
   const { user, loading } = useAuthGuard("faculty");
 
@@ -65,69 +64,44 @@ export default function FacultyDashboard() {
   
       <div className="bg-slate-900 text-white flex justify-between items-center px-6 py-3 shadow-md z-20">
         <div className="flex items-center space-x-4">
-          <FaBars className="text-slate-300 hover:text-white cursor-pointer" size={20} />
-          <h1 className="text-xl font-bold tracking-tight">
+          <button
+            onClick={() => setSelectedCourse(null)}
+            className="text-xl font-bold tracking-tight hover:text-indigo-300 transition-colors"
+          >
             {selectedCourse ? selectedCourse.code : "Faculty Portal"}
-          </h1>
+          </button>
         </div>
-        <div className="flex items-center space-x-6">
-          <div className="relative cursor-pointer hover:text-white text-slate-300 transition-colors">
-            <FaBell size={18} />
-            <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-[10px] font-bold px-1.5 rounded-full">5</span>
-          </div>
-
-          <div className="relative">
-            <button
-              onClick={() => setProfileOpen((o) => !o)}
-              className="flex items-center space-x-3 cursor-pointer group"
-            >
-              <span className="text-sm font-medium hidden sm:block text-slate-200 group-hover:text-white transition-colors">
+        <div className="flex items-center space-x-4">
+          {/* Static profile - shows who's logged in (not a dropdown) */}
+          <div className="flex items-center space-x-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-medium text-slate-100 leading-tight">
                 {profile?.full_name ?? "Faculty"}
-              </span>
-              <div className="h-8 w-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
-                {initials}
-              </div>
-              <FaChevronDown size={12} className="text-slate-400 group-hover:text-white" />
-            </button>
-
-            {profileOpen && (
-              <div className="absolute right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100">
-                  <p className="text-sm font-bold text-slate-800">{profile?.full_name}</p>
-                  <p className="text-xs text-slate-500">{user?.email}</p>
-                  {profile && (
-                    <p className="text-xs text-indigo-600 font-mono mt-1">{profile.employee_id}</p>
-                  )}
-                </div>
-                <div className="py-1">
-                  <button
-                    onClick={() => setProfileOpen(false)}
-                    className="w-full flex items-center px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-                  >
-                    <FaUserCircle className="mr-3 text-slate-400" /> My Profile
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
-                  >
-                    <FaSignOutAlt className="mr-3" /> Logout
-                  </button>
-                </div>
-              </div>
-            )}
+              </p>
+              {profile && (
+                <p className="text-xs text-slate-400 font-mono leading-tight">{profile.employee_id}</p>
+              )}
+            </div>
+            <div className="h-9 w-9 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
+              {initials}
+            </div>
           </div>
+
+          {/* Direct logout - one click, always visible */}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-rose-600 text-slate-200 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            title="Log out"
+          >
+            <FaSignOutAlt size={15} />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
         </div>
       </div>
 
      
       <div className="bg-white border-b border-slate-200 flex items-center px-6 py-0 shadow-sm text-sm font-semibold text-slate-600 overflow-x-auto z-10">
         <div className="flex space-x-1 min-w-max">
-          <button
-            onClick={() => setSelectedCourse(null)}
-            className="flex items-center space-x-2 px-4 py-4 hover:bg-slate-50 hover:text-indigo-700 transition-colors"
-          >
-            <FaHome size={16} /> <span>Home</span>
-          </button>
           <button
             onClick={() => setSelectedCourse(null)}
             className={`flex items-center space-x-2 px-4 py-4 transition-colors ${
@@ -406,7 +380,7 @@ function ContentTab({
       setError("Both title and a URL are required.");
       return;
     }
-    // Light validation — must look like a URL
+    // Light validation - must look like a URL
     if (!/^https?:\/\//i.test(linkUrl)) {
       setError("URL must start with http:// or https://");
       return;
@@ -816,7 +790,7 @@ function GradingTab({
     }
   };
 
-  // No assignment selected yet — show a picker
+  // No assignment selected yet - show a picker
   if (!assignmentId) {
     if (assignments.length === 0) {
       return (
@@ -849,7 +823,7 @@ function GradingTab({
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold text-slate-700">
-          {selectedAssignment?.title} — Submissions
+          {selectedAssignment?.title} - Submissions
         </h3>
         <button
           onClick={() => onSelectAssignment(0)}
@@ -891,7 +865,7 @@ function GradingTab({
                       <p className="text-xs text-slate-400 font-mono">{s.enrollment_no}</p>
                     </td>
                     <td className="p-4 text-xs text-slate-500">
-                      {s.submitted_at ? new Date(s.submitted_at).toLocaleDateString() : "—"}
+                      {s.submitted_at ? new Date(s.submitted_at).toLocaleDateString() : "-"}
                     </td>
                     <td className="p-4">
                       <a
@@ -977,7 +951,7 @@ function GradingTab({
     </div>
   );
 }
-// Attendance tab — pick a date, mark the roster present/absent, bulk save
+// Attendance tab - pick a date, mark the roster present/absent, bulk save
 
 
 function AttendanceMarkPanel({ courseId }: { courseId: number }) {
@@ -1148,7 +1122,7 @@ function AttendanceMarkPanel({ courseId }: { courseId: number }) {
   );
 }
 
-// Attendance tab wrapper — toggle between marking and the summary dashboard
+// Attendance tab wrapper - toggle between marking and the summary dashboard
 
 function AttendanceTab({ courseId }: { courseId: number }) {
   const [mode, setMode] = useState<"mark" | "summary">("mark");
@@ -1180,7 +1154,7 @@ function AttendanceTab({ courseId }: { courseId: number }) {
   );
 }
 
-// Attendance summary — class average + worst-first per-student bars
+// Attendance summary - class average + worst-first per-student bars
 
 interface StudentStat {
   student_id: string;
@@ -1238,7 +1212,7 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
     );
   }
 
-  // Chart data — already sorted worst-first by the backend
+  // Chart data - already sorted worst-first by the backend
   const chartData = data.students.map((s) => ({
     name: s.enrollment_no,
     percentage: s.percentage,
@@ -1247,7 +1221,7 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
 
   return (
     <div className="space-y-6">
-      {/* Header stats — three big numbers anyone can read */}
+      {/* Header stats - three big numbers anyone can read */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200 rounded-xl p-5 text-center">
           <p className="text-3xl font-extrabold text-slate-800">{data.class_average}%</p>
@@ -1272,12 +1246,12 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
         <div className="bg-rose-50 border border-rose-200 rounded-lg px-4 py-3 flex items-center gap-2 text-sm text-rose-700">
           <FaExclamationTriangle size={13} />
           <span>
-            <span className="font-bold">{data.at_risk_count} student{data.at_risk_count !== 1 ? "s" : ""}</span> below the 75% threshold — highlighted in red below.
+            <span className="font-bold">{data.at_risk_count} student{data.at_risk_count !== 1 ? "s" : ""}</span> below the 75% threshold - highlighted in red below.
           </span>
         </div>
       )}
 
-      {/* Bar chart — worst first, color-coded */}
+      {/* Bar chart - worst first, color-coded */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h3 className="text-sm font-bold text-slate-700 mb-1">Attendance by Student</h3>
         <p className="text-xs text-slate-400 mb-4">Sorted lowest first. Red bars are below 75%.</p>
@@ -1298,7 +1272,7 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
         </ResponsiveContainer>
       </div>
 
-      {/* Detailed list — worst first */}
+      {/* Detailed list - worst first */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
         {data.students.map((s) => {
           const c = F_STATUS[s.status];
@@ -1320,7 +1294,7 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
   );
 }
 // ---------------------------------------------------------------------------
-// Exams tab — create exams, enter marks, view class analytics
+// Exams tab - create exams, enter marks, view class analytics
 // ---------------------------------------------------------------------------
 
 interface ExamListItem {
@@ -1731,7 +1705,7 @@ function ExamDetailPanel({ exam, onBack }: { exam: ExamListItem; onBack: () => v
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
-                      placeholder="—"
+                      placeholder="-"
                       value={marks[s.student_id] ?? ""}
                       onChange={(e) => setMarks((m) => ({ ...m, [s.student_id]: e.target.value }))}
                       className="w-20 border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -1801,15 +1775,15 @@ function ExamAnalyticsPanel({ examId, maxMarks }: { examId: number; maxMarks: nu
       {/* Stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
-          <p className="text-2xl font-extrabold text-slate-800">{data.average ?? "—"}</p>
+          <p className="text-2xl font-extrabold text-slate-800">{data.average ?? "-"}</p>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Average ({avgPct}%)</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
-          <p className="text-2xl font-extrabold text-emerald-600">{data.highest ?? "—"}</p>
+          <p className="text-2xl font-extrabold text-emerald-600">{data.highest ?? "-"}</p>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Highest</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
-          <p className="text-2xl font-extrabold text-rose-500">{data.lowest ?? "—"}</p>
+          <p className="text-2xl font-extrabold text-rose-500">{data.lowest ?? "-"}</p>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">Lowest</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">

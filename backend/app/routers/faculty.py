@@ -153,7 +153,7 @@ async def get_course_detail(
                 id=m.id,
                 title=m.title,
                 # For S3 uploads, regenerate a fresh presigned GET URL on every
-                # read — the stored one expires after 7 days. For links, the
+                # read - the stored one expires after 7 days. For links, the
                 # stored URL is permanent so we use it as-is.
                 file_url=get_file_url(m.object_key) if m.source_type == "upload" and m.object_key else m.file_url,
                 source_type=m.source_type,
@@ -173,7 +173,7 @@ async def get_course_detail(
         ],
     )
 
-# POST /faculty/courses/{class_id}/materials/presign  — Step 1: get upload URL
+# POST /faculty/courses/{class_id}/materials/presign  - Step 1: get upload URL
 
 @router.post("/courses/{class_id}/materials/presign", response_model=PresignResponse)
 async def presign_material_upload(
@@ -186,7 +186,7 @@ async def presign_material_upload(
     Step 1 of 2 for file upload.
 
     Returns a presigned S3 PUT URL. The browser uses this URL to upload
-    the file directly to S3 — the file bytes never pass through this server.
+    the file directly to S3 - the file bytes never pass through this server.
 
     Flow:
       1. Frontend calls this endpoint with filename + content_type
@@ -215,7 +215,7 @@ async def presign_material_upload(
     return PresignResponse(presigned_url=presigned_url, object_key=object_key)
 
 
-# POST /faculty/courses/{class_id}/materials/confirm  — Step 2: save to DB
+# POST /faculty/courses/{class_id}/materials/confirm  - Step 2: save to DB
 
 @router.post("/courses/{class_id}/materials/confirm", status_code=201)
 async def confirm_material_upload(
@@ -260,7 +260,7 @@ async def confirm_material_upload(
     return {"message": "Material saved", "id": material.id}
 
 
-# POST /faculty/courses/{class_id}/materials/link — attach an external link
+# POST /faculty/courses/{class_id}/materials/link - attach an external link
 
 @router.post("/courses/{class_id}/materials/link", status_code=201)
 async def add_link_material(
@@ -271,7 +271,7 @@ async def add_link_material(
 ):
     """
     Attach an external link (Google Drive, YouTube, etc) as a material.
-    No S3 involvement — the URL is stored as-is and served unchanged.
+    No S3 involvement - the URL is stored as-is and served unchanged.
     """
     result = await db.execute(
         select(FacultyProfile)
@@ -319,7 +319,7 @@ async def delete_material(
         raise HTTPException(status_code=404, detail="Material not found or not yours")
 
     # Delete the file from S3 before removing the DB record.
-    # delete_file() is non-fatal — if S3 delete fails, the DB record
+    # delete_file() is non-fatal - if S3 delete fails, the DB record
     # is still removed (orphaned S3 objects are preferable to stuck DB records).
     if material.object_key:
         delete_file(material.object_key)
@@ -329,7 +329,7 @@ async def delete_material(
     return {"message": "Material deleted"}
 
 
-# POST /faculty/courses/{class_id}/assignments  — create assignment
+# POST /faculty/courses/{class_id}/assignments  - create assignment
 
 @router.post("/courses/{class_id}/assignments", status_code=201)
 async def create_assignment(
@@ -441,7 +441,7 @@ async def grade_submission(
     await db.commit()
     return {"message": "Submission graded"}
 
-# Attendance — roster + bulk save
+# Attendance - roster + bulk save
 
 async def _verify_teaches_class(class_id: int, profile: FacultyProfile, db: AsyncSession):
     """Raise 403 unless this faculty member is assigned to the class."""
@@ -567,7 +567,7 @@ async def save_attendance(
     await db.commit()
     return {"message": "Attendance saved", "updated": updated, "created": created}
 
-# Exams — create, enter results, analytics
+# Exams - create, enter results, analytics
 
 async def _assert_owns_exam(exam_id: int, profile: FacultyProfile, db: AsyncSession) -> Exam:
     """Fetch the exam and ensure this faculty teaches its class."""

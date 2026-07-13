@@ -71,7 +71,7 @@ export const studentService = {
     );
     const { presigned_url, object_key } = presignRes.data;
 
-    // Step 2: raw PUT to S3 — bare axios, NOT the `api` instance
+    // Step 2: raw PUT to S3 - bare axios, NOT the `api` instance
     await axios.put(presigned_url, file, {
       headers: { "Content-Type": contentType },
       onUploadProgress: (e) => {

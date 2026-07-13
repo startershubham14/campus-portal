@@ -30,7 +30,7 @@ axiosInstance.interceptors.response.use(
         message = `Request failed (${error.response.status})`;
       }
     } else if (error.request) {
-      // Request sent but no response — network/CORS/server down
+      // Request sent but no response - network/CORS/server down
       message = "Cannot reach the server. Check your connection.";
     }
 

@@ -68,7 +68,7 @@ class UploadMaterialRequest(BaseModel):
 
 class LinkMaterialRequest(BaseModel):
     title: str
-    # External URL (Google Drive, YouTube, etc). Stored as-is —
+    # External URL (Google Drive, YouTube, etc). Stored as-is -
     # no S3, no presigned URL regeneration.
     url: str
 

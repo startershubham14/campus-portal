@@ -1,9 +1,9 @@
 """
-S3 utilities — presigned URL generation.
+S3 utilities - presigned URL generation.
 
 Why presigned URLs: 
   The browser uploads directly to S3. Your FastAPI server never receives
-  the file bytes — it only generates a short-lived signed URL that
+  the file bytes - it only generates a short-lived signed URL that
   authorises one specific upload operation. This means:
     - No memory pressure on your server
     - No file size limits from FastAPI/nginx
@@ -30,14 +30,14 @@ def generate_presigned_upload_url(
     folder: str,
     filename: str,
     content_type: str,
-    expires_in: int = 300,  # 5 minutes — enough for any upload
+    expires_in: int = 300,  # 5 minutes - enough for any upload
 ) -> tuple[str, str]:
     """
     Generate a presigned PUT URL for a single file upload.
 
     Returns (presigned_url, object_key).
-      presigned_url — the browser PUT target. Valid for `expires_in` seconds.
-      object_key    — the S3 key to store in the DB as the file reference.
+      presigned_url - the browser PUT target. Valid for `expires_in` seconds.
+      object_key    - the S3 key to store in the DB as the file reference.
 
     The key includes a UUID so two files with the same name don't collide:
       e.g. "materials/csc801/a3f8c1d2-week1-notes.pdf"
@@ -69,7 +69,7 @@ def get_file_url(object_key: str) -> str:
     Build the permanent public-style URL for a stored object.
     Since the bucket is private, we use a long-lived presigned GET URL
     (7 days) for viewing. For truly public files you'd set a bucket policy
-    instead — but keeping the bucket private is safer for a campus portal.
+    instead - but keeping the bucket private is safer for a campus portal.
     """
     try:
         return _s3_client.generate_presigned_url(
@@ -89,5 +89,5 @@ def delete_file(object_key: str) -> None:
             Key=object_key,
         )
     except ClientError as e:
-        # Log but don't crash — DB record deletion proceeds regardless
+        # Log but don't crash - DB record deletion proceeds regardless
         print(f"Warning: S3 delete failed for {object_key}: {e}")

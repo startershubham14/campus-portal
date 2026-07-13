@@ -23,7 +23,7 @@ from app.routers.exam_schemas import StudentExamResult
 router = APIRouter(prefix="/student", tags=["Student"])
 
 
-# Dependency — resolve the logged-in user to their StudentProfile
+# Dependency - resolve the logged-in user to their StudentProfile
 
 async def get_student_profile(
     current_user: User = Depends(require_student),
@@ -32,7 +32,7 @@ async def get_student_profile(
     """
     Returns the StudentProfile for the authenticated student.
     Every student endpoint uses this so we never serve one student's
-    data to another — the profile is always derived from the cookie,
+    data to another - the profile is always derived from the cookie,
     never from a URL parameter the client could tamper with.
     """
     result = await db.execute(
@@ -100,7 +100,7 @@ async def get_course_detail(
 ):
     """
     Returns a single course with its materials and assignments.
-    Verifies the student is actually enrolled before returning data —
+    Verifies the student is actually enrolled before returning data -
     a student cannot fetch another class's materials by guessing an ID.
     """
     result = await db.execute(
@@ -256,7 +256,7 @@ async def get_grades(
         for g in grades
     ]
 
-# Assignment submission — S3 presigned upload flow (mirrors materials)
+# Assignment submission - S3 presigned upload flow (mirrors materials)
 
 async def _verify_assignment_access(
     assignment_id: int, profile: StudentProfile, db: AsyncSession
@@ -299,7 +299,7 @@ async def presign_submission(
 ):
     """
     Step 1 of 2. Returns a presigned S3 PUT URL for the submission file.
-    The browser uploads directly to S3 — file bytes never touch this server.
+    The browser uploads directly to S3 - file bytes never touch this server.
     """
     await _verify_assignment_access(assignment_id, profile, db)
 
@@ -326,7 +326,7 @@ async def confirm_submission(
     Step 2 of 2. Called after the browser has PUT the file to S3.
 
     If the student already submitted this assignment, the old submission
-    is updated (and the old S3 file deleted) — re-submission overwrites,
+    is updated (and the old S3 file deleted) - re-submission overwrites,
     it does not create a duplicate. Marks and feedback are reset since
     the file changed and needs re-grading.
     """
@@ -353,7 +353,7 @@ async def confirm_submission(
         existing.file_url = view_url
         existing.object_key = payload.object_key
         existing.submitted_at = datetime.now(timezone.utc)
-        # Reset grading — the submission changed, so prior marks are stale
+        # Reset grading - the submission changed, so prior marks are stale
         existing.marks_awarded = None
         existing.feedback = None
         await db.commit()
@@ -371,7 +371,7 @@ async def confirm_submission(
     return {"message": "Submission received", "id": submission.id}
 
 
-# GET /student/results — exam results across all enrolled classes
+# GET /student/results - exam results across all enrolled classes
 
 
 @router.get("/results", response_model=list[StudentExamResult])
@@ -466,15 +466,15 @@ def _attendance_status_and_message(present: int, total: int) -> tuple[str, str]:
         can_miss = int(present / (ATTENDANCE_THRESHOLD / 100) - total)
         can_miss = max(0, can_miss)
         if pct >= 85:
-            return "safe", f"Safe — you can miss {can_miss} more class{'es' if can_miss != 1 else ''}."
+            return "safe", f"Safe - you can miss {can_miss} more class{'es' if can_miss != 1 else ''}."
         # 75-85% is technically safe but thin
-        return "warning", f"Just above the line — you can miss only {can_miss} more class{'es' if can_miss != 1 else ''}."
+        return "warning", f"Just above the line - you can miss only {can_miss} more class{'es' if can_miss != 1 else ''}."
     else:
         # How many consecutive classes must be attended to reach 75%?
         # (present + attend) / (total + attend) >= 0.75
         need = (ATTENDANCE_THRESHOLD / 100 * total - present) / (1 - ATTENDANCE_THRESHOLD / 100)
         need = max(1, int(need) + (1 if need != int(need) else 0))  # ceil, min 1
-        return "critical", f"At risk — attend the next {need} class{'es' if need != 1 else ''} to reach 75%."
+        return "critical", f"At risk - attend the next {need} class{'es' if need != 1 else ''} to reach 75%."
 
 
 @router.get("/attendance/summary", response_model=AttendanceOverallSummary)

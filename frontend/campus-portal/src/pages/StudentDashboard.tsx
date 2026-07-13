@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  FaBell, FaHome, FaTachometerAlt, FaBook,
-  FaBars, FaEllipsisV, FaChevronDown, FaFilePdf,
+  FaHome, FaBook,
+  FaEllipsisV, FaFilePdf,
   FaUsers, FaSpinner, FaClipboardList, FaSignOutAlt,
-FaUserCircle, FaUpload, FaCheckCircle, FaStar, FaFileAlt,
+  FaUpload, FaCheckCircle, FaStar, FaFileAlt,
   FaCalendarCheck, FaExclamationTriangle, FaCheck, FaAward, FaTrophy
 } from "react-icons/fa";
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
@@ -32,7 +32,6 @@ export default function StudentDashboard() {
   const [view, setView] = useState<"courses" | "attendance" | "results">("courses");
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
   const navigate = useNavigate();
   const { user, loading } = useAuthGuard("student");
 
@@ -63,73 +62,44 @@ export default function StudentDashboard() {
       {/* Top nav */}
       <div className="bg-slate-900 text-white flex justify-between items-center px-6 py-3 shadow-md z-20">
         <div className="flex items-center space-x-4">
-          <FaBars className="text-slate-300 hover:text-white cursor-pointer" size={20} />
-          <h1 className="text-xl font-bold tracking-tight">
+          <button
+            onClick={() => { setView("courses"); setSelectedCourse(null); }}
+            className="text-xl font-bold tracking-tight hover:text-indigo-300 transition-colors"
+          >
             {selectedCourse ? selectedCourse.code : "Campus Portal"}
-          </h1>
+          </button>
         </div>
-        <div className="flex items-center space-x-6">
-          <div className="flex space-x-5 text-slate-300">
-            <div className="relative cursor-pointer hover:text-white transition-colors">
-              <FaBell size={18} />
-              <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-[10px] font-bold px-1.5 rounded-full">3</span>
+        <div className="flex items-center space-x-4">
+          {/* Static profile - shows who's logged in (not a dropdown) */}
+          <div className="flex items-center space-x-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-medium text-slate-100 leading-tight">
+                {profile?.full_name ?? "Student"}
+              </p>
+              {profile && (
+                <p className="text-xs text-slate-400 font-mono leading-tight">{profile.enrollment_no}</p>
+              )}
+            </div>
+            <div className="h-9 w-9 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
+              {initials}
             </div>
           </div>
 
-          {/* Profile dropdown - clicking here no longer logs out */}
-          <div className="relative">
-            <button
-              onClick={() => setProfileOpen((o) => !o)}
-              className="flex items-center space-x-3 cursor-pointer group"
-            >
-              <span className="text-sm font-medium tracking-wide hidden sm:block text-slate-200 group-hover:text-white transition-colors">
-                {profile?.full_name ?? "Student"}
-              </span>
-              <div className="h-8 w-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
-                {initials}
-              </div>
-              <FaChevronDown size={12} className="text-slate-400 group-hover:text-white" />
-            </button>
-
-            {/* Dropdown */}
-            {profileOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100">
-                  <p className="text-sm font-bold text-slate-800">{profile?.full_name}</p>
-                  <p className="text-xs text-slate-500">{user?.email}</p>
-                  {profile && (
-                    <p className="text-xs text-indigo-600 font-mono mt-1">{profile.enrollment_no}</p>
-                  )}
-                </div>
-                <div className="py-1">
-                  <button
-                    onClick={() => { setProfileOpen(false); }}
-                    className="w-full flex items-center px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-                  >
-                    <FaUserCircle className="mr-3 text-slate-400" /> My Profile
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
-                  >
-                    <FaSignOutAlt className="mr-3" /> Logout
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Direct logout - one click, always visible */}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-rose-600 text-slate-200 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            title="Log out"
+          >
+            <FaSignOutAlt size={15} />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
         </div>
       </div>
 
       {/* Sub nav */}
       <div className="bg-white border-b border-slate-200 flex justify-between items-center px-6 py-0 shadow-sm text-sm font-semibold text-slate-600 overflow-x-auto z-10">
         <div className="flex space-x-1 min-w-max">
-          <button
-            onClick={() => { setView("courses"); setSelectedCourse(null); }}
-            className="flex items-center space-x-2 px-4 py-4 hover:bg-slate-50 hover:text-indigo-700 transition-colors"
-          >
-            <FaHome size={16} /> <span>Home</span>
-          </button>
           <button
             onClick={() => { setView("courses"); setSelectedCourse(null); }}
             className={`flex items-center space-x-2 px-4 py-4 transition-colors ${
