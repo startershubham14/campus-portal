@@ -212,3 +212,90 @@ export interface ExamResultEntry {
   student_id: string;
   marks_obtained: number;
 }
+
+// Student
+
+export interface StudentProfile {
+  full_name: string;
+  enrollment_no: string;
+  department: string;
+  current_semester: number;
+}
+
+export interface StudentCourse {
+  id: number;
+  code: string;
+  name: string;
+  department: string;
+  semester: number;
+}
+
+export interface StudentMaterial {
+  id: number;
+  title: string;
+  file_url: string;
+  uploaded_at: string | null;
+}
+
+export interface StudentAssignment {
+  id: number;
+  title: string;
+  description: string | null;
+  due_date: string;
+  submitted: boolean;
+  submission_id: number | null;
+  submission_file_url: string | null;
+  submitted_at: string | null;
+  marks_awarded: number | null;
+  feedback: string | null;
+}
+
+export interface StudentCourseDetail extends StudentCourse {
+  materials: StudentMaterial[];
+  assignments: StudentAssignment[];
+}
+
+export interface StudentGrade {
+  id: number;
+  subject: string;
+  marks_obtained: number;
+  total_marks: number;
+  semester: number;
+  percentage: number;
+}
+
+export interface AttendanceSubjectSummary {
+  class_id: number;
+  class_code: string;
+  class_name: string;
+  total_sessions: number;
+  present: number;
+  absent: number;
+  percentage: number;
+  status: "safe" | "warning" | "critical";
+  message: string;
+}
+
+export interface AttendanceOverallSummary {
+  overall_percentage: number;
+  total_sessions: number;
+  total_present: number;
+  status: "safe" | "warning" | "critical";
+  subjects: AttendanceSubjectSummary[];
+}
+
+export interface StudentExamResult {
+  exam_id: number;
+  title: string;
+  exam_type: string;
+  exam_date: string;
+  class_code: string;
+  class_name: string;
+  max_marks: number;
+  marks_obtained: number | null;
+  percentage: number | null;
+  remarks: string | null;
+  class_average: number | null;
+  rank: number | null;
+  total_ranked: number | null;
+}

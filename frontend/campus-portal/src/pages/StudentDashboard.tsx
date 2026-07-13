@@ -9,82 +9,14 @@ FaUserCircle, FaUpload, FaCheckCircle, FaStar, FaFileAlt,
 } from "react-icons/fa";
 import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { useAuthGuard, logout } from "../hooks/useAuthGuard";
-
-interface Course {
-  id: number;
-  code: string;
-  name: string;
-  department: string;
-  semester: number;
-}
-
-interface Material {
-  id: number;
-  title: string;
-  file_url: string;
-  uploaded_at: string | null;
-}
-
-interface Assignment {
-  id: number;
-  title: string;
-  description: string | null;
-  due_date: string;
-  submitted: boolean;
-  submission_id: number | null;
-  submission_file_url: string | null;
-  submitted_at: string | null;
-  marks_awarded: number | null;
-  feedback: string | null;
-}
-
-interface CourseDetail extends Course {
-  materials: Material[];
-  assignments: Assignment[];
-}
-
-interface StudentProfile {
-  full_name: string;
-  enrollment_no: string;
-  department: string;
-  current_semester: number;
-}
-
-const API = import.meta.env.VITE_API_URL;
-
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(err.detail ?? "Request failed");
-  }
-  return res.json() as Promise<T>;
-}
-
-// file.type is unreliable across browsers/OS — derive MIME from extension so
-// it matches exactly what the presigned URL was signed with (S3 requirement).
-function getMimeType(filename: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    pdf: "application/pdf",
-    doc: "application/msword",
-    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ppt: "application/vnd.ms-powerpoint",
-    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    xls: "application/vnd.ms-excel",
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    zip: "application/zip",
-    txt: "text/plain",
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-  };
-  return map[ext] ?? "application/octet-stream";
-}
+import { studentService } from "../services/studentService";
+import type {
+  StudentProfile,
+  StudentCourse as Course,
+  StudentMaterial as Material,
+  StudentAssignment as Assignment,
+  StudentCourseDetail as CourseDetail,
+} from "../services/types";
 
 // Cycle through these gradients for course cards for cource cards
 const CARD_COLORS = [
@@ -106,9 +38,9 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     if (!loading && user) {
-      apiFetch<StudentProfile>("/student/profile")
+      studentService.getProfile()
         .then(setProfile)
-        .catch(() => {}); // non-fatal — falls back to email initial
+        .catch(() => {}); // non-fatal - falls back to email initial
     }
   }, [loading, user]);
 
@@ -144,7 +76,7 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Profile dropdown — clicking here no longer logs out */}
+          {/* Profile dropdown - clicking here no longer logs out */}
           <div className="relative">
             <button
               onClick={() => setProfileOpen((o) => !o)}
@@ -258,13 +190,13 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) =
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch<Course[]>("/student/courses")
+    studentService.listCourses()
       .then((data) => { setCourses(data); setFiltered(data); })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  // Client-side search (no debounce needed — already local data)
+  // Client-side search (no debounce needed - already local data)
   useEffect(() => {
     const q = search.toLowerCase();
     setFiltered(
@@ -364,7 +296,7 @@ function CourseDetailView({ course, onBack }: { course: Course; onBack: () => vo
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch<CourseDetail>(`/student/courses/${course.id}`);
+      const data = await studentService.getCourseDetail(course.id);
       setDetail(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load course");
@@ -514,32 +446,11 @@ function AssignmentCard({
     }
     setError("");
     try {
-      // Step 1: presign
+      // The service encapsulates presign → S3 PUT → confirm. We flip the
+      // status label to "saving" once the upload bytes finish.
       setStatus("uploading");
-      const { presigned_url, object_key } = await apiFetch<{
-        presigned_url: string;
-        object_key: string;
-      }>(`/student/assignments/${a.id}/submit/presign`, {
-        method: "POST",
-        body: JSON.stringify({
-          filename: file.name,
-          content_type: getMimeType(file.name),
-        }),
-      });
-
-      // Step 2: PUT directly to S3 (raw fetch — no auth header/JSON content type)
-      const s3Res = await fetch(presigned_url, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": getMimeType(file.name) },
-      });
-      if (!s3Res.ok) throw new Error(`S3 upload failed: ${s3Res.status}`);
-
-      // Step 3: confirm
-      setStatus("saving");
-      await apiFetch(`/student/assignments/${a.id}/submit/confirm`, {
-        method: "POST",
-        body: JSON.stringify({ object_key }),
+      await studentService.submitAssignment(a.id, file, (percent) => {
+        if (percent >= 100) setStatus("saving");
       });
 
       setFile(null);
@@ -617,7 +528,7 @@ function AssignmentCard({
 
         {error && <p className="text-red-500 text-xs mb-2">{error}</p>}
 
-        {/* Don't allow re-submission once graded — the grade is final */}
+        {/* Don't allow re-submission once graded - the grade is final */}
         {graded ? (
           <p className="text-xs text-slate-400 italic">This submission has been graded.</p>
         ) : !expanded ? (
@@ -670,7 +581,7 @@ function GradesTab({ courseId }: { courseId: number }) {
 
   // Grades are fetched per-course by matching the semester
   useEffect(() => {
-    apiFetch<{ id: number; subject: string; marks_obtained: number; total_marks: number; semester: number; percentage: number }[]>("/student/grades")
+    studentService.listGrades()
       .then(setGrades)
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -767,7 +678,7 @@ function AttendanceDashboard() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch<OverallSummary>("/student/attendance/summary")
+    studentService.getAttendanceSummary()
       .then(setData)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -787,7 +698,7 @@ function AttendanceDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header explains what this page IS — so anyone landing here understands */}
+      {/* Header explains what this page IS - so anyone landing here understands */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800">My Attendance</h1>
         <p className="text-sm text-slate-500 mt-1">
@@ -796,7 +707,7 @@ function AttendanceDashboard() {
         </p>
       </div>
 
-      {/* Overall banner — the single most important number, big and colored */}
+      {/* Overall banner - the single most important number, big and colored */}
       <div className={`rounded-2xl border ${overall.border} ${overall.bg} p-6 flex flex-col sm:flex-row items-center gap-6`}>
         <div className="relative w-32 h-32 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
@@ -897,7 +808,7 @@ function AttendanceDashboard() {
   );
 }
 // ---------------------------------------------------------------------------
-// Results dashboard — exam results with rank + class-average comparison
+// Results dashboard - exam results with rank + class-average comparison
 // ---------------------------------------------------------------------------
 
 interface StudentResult {
@@ -929,7 +840,7 @@ function ResultsDashboard() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch<StudentResult[]>("/student/results")
+    studentService.getResults()
       .then(setResults)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -995,7 +906,7 @@ function ResultsDashboard() {
             </div>
           )}
 
-          {/* Trend chart — you vs class average over time */}
+          {/* Trend chart - you vs class average over time */}
           {trend.length >= 2 && (
             <div className="bg-white border border-slate-200 rounded-xl p-5">
               <h3 className="text-sm font-bold text-slate-700 mb-1">Performance Over Time</h3>
@@ -1062,7 +973,7 @@ function ResultsDashboard() {
                       </div>
                     </div>
 
-                    {/* Comparison row — only when graded */}
+                    {/* Comparison row - only when graded */}
                     {graded && (
                       <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
                         {r.rank !== null && r.total_ranked !== null && (
