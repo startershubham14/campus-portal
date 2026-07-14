@@ -171,22 +171,7 @@ campus-portal/
 
 ## Architecture
 
-```
-┌──────────────┐        httpOnly cookie          ┌──────────────┐
-│              │  ─────────────────────────────► │              │
-│   React SPA  │        JSON over HTTPS           │   FastAPI    │
-│  (Vite/TS)   │  ◄───────────────────────────── │   backend    │
-│              │                                  │              │
-└──────┬───────┘                                  └──────┬───────┘
-       │                                                 │
-       │  direct upload/download                         │  async SQLAlchemy
-       │  via presigned URLs                             │
-       ▼                                                 ▼
-┌──────────────┐                                  ┌──────────────┐
-│   AWS S3     │                                  │  PostgreSQL  │
-│  (files)     │                                  │  (data)      │
-└──────────────┘                                  └──────────────┘
-```
+
 
 Files never pass through the backend. The server issues short-lived **presigned URLs** and the browser uploads/downloads directly to/from S3 - no memory pressure on the API, no upload size limits.
 
