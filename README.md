@@ -1,14 +1,18 @@
----
+# Campus Portal
+
+A full-stack college management system with role-based access for **admins**, **faculty**, and **students**. Admins manage users and classes, faculty run their courses (materials, assignments, exams, attendance), and students access coursework, submit assignments, and track their own attendance and results.
+
+Built with **FastAPI** (async Python) and **React + TypeScript**, backed by **PostgreSQL** and **AWS S3**.
 
 ## Live Demo
 
-**[https://campus-portal-gilt.vercel.app](https://campus-portal-gilt.vercel.app)**
+**➡️ [https://campus-portal-gilt.vercel.app](https://campus-portal-gilt.vercel.app)**
 
 Sign in with either account below to explore the two main roles:
 
-| Role        | Email                        | Password         |
-|-------------|------------------------------|------------------|
-| **Faculty** | `meena.joshi@college.edu.in` | `meena.joshi`    |
+| Role | Email | Password |
+|------|-------|----------|
+| **Faculty** | `meena.joshi@college.edu.in` | `meena.joshi` |
 | **Student** | `omkar.jadhav02@example.com` | `omkar.jadhav02` |
 
 > Shared demo accounts — data may be modified by other visitors. There is no public
@@ -20,11 +24,13 @@ Sign in with either account below to explore the two main roles:
 
 ### Deployment architecture
 
-| Layer        | Hosted on                                                   |
-|--------------|-------------------------------------------------------------|
-| Frontend     | Vercel                                                      |
-| Backend API  | AWS EC2 (nginx → gunicorn/uvicorn), HTTPS via Let's Encrypt |
-| Database     | AWS RDS (PostgreSQL)                                        |
-| File storage | AWS S3 (direct browser uploads via presigned URLs)          |
+| Layer | Hosted on |
+|-------|-----------|
+| Frontend | Vercel |
+| Backend API | AWS EC2 (nginx → gunicorn/uvicorn), HTTPS via Let's Encrypt |
+| Database | AWS RDS (PostgreSQL) |
+| File storage | AWS S3 (direct browser uploads via presigned URLs) |
 
 ---
+
+## Getting Started
