@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaHome, FaBook,
   FaEllipsisV, FaFilePdf,
-  FaUsers, FaSpinner, FaClipboardList, FaSignOutAlt,
+  FaSpinner, FaClipboardList, FaSignOutAlt,
   FaUpload, FaCheckCircle, FaStar, FaFileAlt,
   FaCalendarCheck, FaExclamationTriangle, FaCheck, FaAward, FaTrophy
 } from "react-icons/fa";
@@ -154,25 +154,22 @@ export default function StudentDashboard() {
 
 function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) => void }) {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [filtered, setFiltered] = useState<Course[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     studentService.listCourses()
-      .then((data) => { setCourses(data); setFiltered(data); })
+      .then(setCourses)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
   // Client-side search (no debounce needed - already local data)
-  useEffect(() => {
+  const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    setFiltered(
-      courses.filter(
-        (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
-      )
+    return courses.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
     );
   }, [search, courses]);
 

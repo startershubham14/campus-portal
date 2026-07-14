@@ -157,8 +157,8 @@ function HeroSection() {
   );
 }
 
-function Carousel({ slides }) {
-  let [current, setCurrent] = useState(0);
+function Carousel({ slides }: { slides: string[] }) {
+  const [current, setCurrent] = useState(0);
 
   const previousSlide = () => {
     if (current === 0) setCurrent(slides.length - 1);
@@ -193,7 +193,7 @@ function Carousel({ slides }) {
       </div>
 
       <div className="absolute bottom-0 py-4 flex justify-center gap-3 w-full bg-linear-to-t from-black/40 to-transparent">
-        {slides.map((s, i) => (
+        {slides.map((_, i) => (
           <div
             onClick={() => setCurrent(i)}
             key={"circle" + i}

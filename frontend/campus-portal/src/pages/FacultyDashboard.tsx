@@ -195,7 +195,7 @@ function CourseOverview({ onSelectCourse }: { onSelectCourse: (course: Course) =
               className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col group"
               onClick={() => onSelectCourse(course)}
             >
-              <div className={`h-36 bg-gradient-to-r ${CARD_COLORS[index % CARD_COLORS.length]} relative overflow-hidden`}>
+              <div className={`h-36 bg-linear-to-r ${CARD_COLORS[index % CARD_COLORS.length]} relative overflow-hidden`}>
                 <div
                   className="absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity"
                   style={{
@@ -361,7 +361,7 @@ function ContentTab({
   onMutate,
 }: {
   courseId: number;
-  courseCode?: string;
+  courseCode: string;
   materials: Material[];
   onMutate: () => void;
 }) {
@@ -1268,7 +1268,7 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
             <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
             <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
             <Tooltip
-              formatter={(v: number) => [`${v}%`, "Attendance"]}
+              formatter={(v) => [`${v}%`, "Attendance"]}
               contentStyle={{ fontSize: 12, borderRadius: 8 }}
             />
             <Bar dataKey="percentage" radius={[0, 4, 4, 0]}>
@@ -1810,7 +1810,7 @@ function ExamAnalyticsPanel({ examId, maxMarks }: { examId: number; maxMarks: nu
             <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
             <Tooltip
-              formatter={(v: number) => [`${v} students`, "Count"]}
+              formatter={(v) => [`${v} students`, "Count"]}
               contentStyle={{ fontSize: 12, borderRadius: 8 }}
             />
             <Bar dataKey="count" radius={[4, 4, 0, 0]} fill="#6366f1" />
