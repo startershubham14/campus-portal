@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaHome, FaBook,
@@ -374,6 +374,13 @@ function ContentTab({
   const [addingLink, setAddingLink] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
+    };
+  }, []);
 
   const handleAddLink = async () => {
     if (!title.trim() || !linkUrl.trim()) {
@@ -426,7 +433,8 @@ function ContentTab({
       setFile(null);
       setUploadStatus("done");
       onMutate();
-      setTimeout(() => setUploadStatus("idle"), 2000);
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
+      idleTimeoutRef.current = setTimeout(() => setUploadStatus("idle"), 2000);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Upload failed");
       setUploadStatus("idle");
