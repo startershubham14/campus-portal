@@ -53,7 +53,7 @@ async def login_user(
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # in seconds
     )
 
-    # 5. Return only the role — the token itself never touches the frontend
+    # 5. Return only the role - the token itself never touches the frontend
     return {"role": user.role}
 
 

@@ -96,7 +96,7 @@ campus-portal/
 ## Features
 
 ### Admin
-- Create user accounts for any role (students, faculty, other admins) — there is **no public self-registration**
+- Create user accounts for any role (students, faculty, other admins) - there is **no public self-registration**
 - Auto-generated enrollment numbers (`STU00001`) and employee IDs (`FAC00001`)
 - Soft-delete (deactivate/reactivate) users
 - Create classes and assign faculty / enroll students
@@ -161,7 +161,7 @@ campus-portal/
 └──────────────┘                                  └──────────────┘
 ```
 
-Files never pass through the backend. The server issues short-lived **presigned URLs** and the browser uploads/downloads directly to/from S3 — no memory pressure on the API, no upload size limits.
+Files never pass through the backend. The server issues short-lived **presigned URLs** and the browser uploads/downloads directly to/from S3 - no memory pressure on the API, no upload size limits.
 
 ---
 
@@ -169,14 +169,14 @@ Files never pass through the backend. The server issues short-lived **presigned 
 
 Security was treated as a first-class concern rather than an afterthought:
 
-- **httpOnly cookies for auth.** JWTs are stored in `httpOnly`, `SameSite=Lax` cookies, not `localStorage` — so they're invisible to JavaScript and can't be exfiltrated via XSS. The `Secure` flag is toggled on in production.
+- **httpOnly cookies for auth.** JWTs are stored in `httpOnly`, `SameSite=Lax` cookies, not `localStorage` - so they're invisible to JavaScript and can't be exfiltrated via XSS. The `Secure` flag is toggled on in production.
 - **Server-side role enforcement.** Every protected route re-derives the user and role from the cookie's JWT on each request. The client's claimed role is never trusted; a tampered request is rejected at the dependency layer before any handler runs.
 - **No public registration.** Account creation is admin-only. The first admin is seeded via a one-time CLI script that writes directly to the database, breaking the chicken-and-egg problem without exposing an open endpoint.
-- **Ownership checks at the data layer.** Faculty can only touch their own classes/materials/exams; students can only submit to classes they're enrolled in — verified via DB queries, not just UI gating.
+- **Ownership checks at the data layer.** Faculty can only touch their own classes/materials/exams; students can only submit to classes they're enrolled in - verified via DB queries, not just UI gating.
 - **Rate limiting** on the login endpoint (SlowAPI) to blunt brute-force attempts.
 - **Least-privilege IAM.** The S3 IAM user is scoped to `PutObject`/`GetObject`/`DeleteObject` on a single bucket, not `AmazonS3FullAccess`.
 - **Password hashing** with bcrypt.
-- **Explicit CORS** — specific methods and headers, not wildcards.
+- **Explicit CORS** - specific methods and headers, not wildcards.
 
 ---
 
@@ -204,15 +204,15 @@ Full interactive documentation is auto-generated at `/docs`.
 
 ## Notable Engineering Decisions
 
-**Presigned URLs over server-proxied uploads.** The backend never handles file bytes — it signs a URL and the browser talks to S3 directly. This keeps the API stateless and cheap, and sidesteps request-size limits. Stored view URLs are regenerated on each read since presigned GETs expire.
+**Presigned URLs over server-proxied uploads.** The backend never handles file bytes - it signs a URL and the browser talks to S3 directly. This keeps the API stateless and cheap, and sidesteps request-size limits. Stored view URLs are regenerated on each read since presigned GETs expire.
 
 **Attendance denominator = sessions held, not calendar days.** A "session" exists only when attendance was actually taken, so holidays and un-held classes never dilute the percentage. This avoids building a separate holiday-calendar feature while keeping the 75% math honest.
 
-**Normalized exams/results schema.** Exams and results live in separate tables, enabling aggregation across either axis — class performance per exam, or one student's trend across exams — which a flat grades table can't express cleanly.
+**Normalized exams/results schema.** Exams and results live in separate tables, enabling aggregation across either axis - class performance per exam, or one student's trend across exams - which a flat grades table can't express cleanly.
 
 **Migrations, not `create_all`.** Schema is managed exclusively through Alembic, so changes are versioned and reversible rather than silently applied at startup.
 
-**Business logic on the server.** Computed values like attendance status, "classes you can miss," pass/fail counts, and class rank are calculated in the API and sent to the frontend as ready-to-render data — keeping the logic testable and the UI thin.
+**Business logic on the server.** Computed values like attendance status, "classes you can miss," pass/fail counts, and class rank are calculated in the API and sent to the frontend as ready-to-render data - keeping the logic testable and the UI thin.
 
 ---
 

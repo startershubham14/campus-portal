@@ -280,7 +280,7 @@ function UsersTab() {
               {users.map((user) => (
                 <tr key={user.id} className={`text-sm text-slate-700 hover:bg-slate-50 transition-colors ${!user.is_active ? "opacity-50" : ""}`}>
                   <td className="p-4">
-                    <p className="font-bold text-slate-900">{user.profile?.full_name ?? "—"}</p>
+                    <p className="font-bold text-slate-900">{user.profile?.full_name ?? "-"}</p>
                     <p className="text-slate-500 text-xs">{user.email}</p>
                   </td>
                   <td className="p-4 font-mono text-xs">
@@ -289,10 +289,10 @@ function UsersTab() {
                     : <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-sans font-bold">Admin</span>}
                   </td>
                   {role !== "admin" && (
-                    <td className="p-4 text-slate-600">{user.profile?.department ?? "—"}</td>
+                    <td className="p-4 text-slate-600">{user.profile?.department ?? "-"}</td>
                   )}
                   {role === "student" && (
-                    <td className="p-4 text-slate-600">Sem {user.profile?.current_semester ?? "—"}</td>
+                    <td className="p-4 text-slate-600">Sem {user.profile?.current_semester ?? "-"}</td>
                   )}
                   <td className="p-4">
                     <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${
@@ -455,7 +455,7 @@ function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
 }
 
 
-// ClassesTab — list + create + manage
+// ClassesTab - list + create + manage
 
 function ClassesTab() {
   const [classes, setClasses] = useState<ClassOut[]>([]);
@@ -655,7 +655,7 @@ function CreateClassModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   );
 }
 
-// Class manage panel — assign faculty, enroll students
+// Class manage panel - assign faculty, enroll students
 
 type ManageTab = "faculty" | "students";
 

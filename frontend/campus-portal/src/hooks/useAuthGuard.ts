@@ -17,13 +17,13 @@ export function useAuthGuard(requiredRole: Role) {
       try {
         const data = await authService.getMe();
         if (data.role !== requiredRole) {
-          // Logged in but wrong role — kick back to login
+          // Logged in but wrong role - kick back to login
           navigate("/login");
           return;
         }
         setUser(data);
       } catch {
-        // 401 or network error — can't verify, redirect
+        // 401 or network error - can't verify, redirect
         navigate("/login");
       } finally {
         setLoading(false);

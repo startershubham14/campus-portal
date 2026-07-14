@@ -18,7 +18,7 @@ export default function Login() {
     try {
       const data = await authService.login(email, password);
 
-      // The token is now securely in an httpOnly cookie — we never touch it.
+      // The token is now securely in an httpOnly cookie - we never touch it.
       // We only use the returned role to decide where to redirect; it's not
       // stored on the client. The next verification comes from /auth/me.
       if (data.role === "student") navigate("/student");

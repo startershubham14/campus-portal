@@ -18,12 +18,12 @@ export const authService = {
     return res.data;
   },
 
-  /** Clear the auth cookie server-side. Never throws — logout should always proceed. */
+  /** Clear the auth cookie server-side. Never throws - logout should always proceed. */
   async logout(): Promise<void> {
     try {
       await axiosInstance.post("/auth/logout");
     } catch {
-      // Ignore — we redirect regardless of whether the call succeeded.
+      // Ignore - we redirect regardless of whether the call succeeded.
     }
   },
 };

@@ -1293,9 +1293,8 @@ function AttendanceSummaryPanel({ courseId }: { courseId: number }) {
     </div>
   );
 }
-// ---------------------------------------------------------------------------
+
 // Exams tab - create exams, enter marks, view class analytics
-// ---------------------------------------------------------------------------
 
 interface ExamListItem {
   id: number;

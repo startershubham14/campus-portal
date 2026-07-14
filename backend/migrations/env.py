@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.config import settings
 from app.database.connection import Base
-from app.database import models  # noqa: F401 — registers all tables with Base.metadata
+from app.database import models  # noqa: F401 - registers all tables with Base.metadata
 
 config = context.config
 
@@ -25,7 +25,7 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    # Read from .env via pydantic settings — never hardcode credentials.
+    # Read from .env via pydantic settings - never hardcode credentials.
     # asyncpg is the right async driver; Alembic handles it via run_sync below.
     return settings.DATABASE_URL
 

@@ -16,7 +16,7 @@ async def get_current_user(
     Reads the httpOnly cookie, validates the JWT, and returns the real
     User object from the database. Raises 401 if anything is wrong.
 
-    This is the core auth dependency — inject it into any route that
+    This is the core auth dependency - inject it into any route that
     needs a logged-in user, e.g.:
         async def my_route(user: User = Depends(get_current_user)):
     """
@@ -31,7 +31,7 @@ async def get_current_user(
     user_id_raw: str = payload.get("sub")
 
     # The "sub" claim is now a UUID string (e.g. from str(user.id)).
-    # Parsing can fail if the token is malformed or from an old format —
+    # Parsing can fail if the token is malformed or from an old format -
     # treat that the same as an invalid token rather than crashing with 500.
     try:
         user_id = uuid.UUID(user_id_raw)
@@ -41,7 +41,7 @@ async def get_current_user(
             detail="Invalid token subject"
         )
 
-    # Fetch the real user from DB — don't trust the payload alone
+    # Fetch the real user from DB - don't trust the payload alone
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
 
@@ -57,7 +57,7 @@ async def get_current_user(
 def require_role(role: str):
     """
     Factory that returns a FastAPI dependency enforcing a specific role.
-    The role is taken from the JWT on the server — the client has no say.
+    The role is taken from the JWT on the server - the client has no say.
 
     Usage:
         async def admin_route(user: User = Depends(require_admin)):
@@ -72,7 +72,7 @@ def require_role(role: str):
     return role_checker
 
 
-# Ready-made guards for each role — import and use directly in routes
+# Ready-made guards for each role - import and use directly in routes
 require_admin = require_role("admin")
 require_student = require_role("student")
 require_faculty = require_role("faculty")

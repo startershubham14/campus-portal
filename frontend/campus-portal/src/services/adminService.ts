@@ -21,13 +21,13 @@ interface ListUsersFilters {
  * Every call here is gated server-side by the require_admin dependency.
  */
 export const adminService = {
-  // --- Stats ---------------------------------------------------------------
+  // Stats
   async getStats(): Promise<Stats> {
     const res = await axiosInstance.get<Stats>("/admin/stats");
     return res.data;
   },
 
-  // --- Users ---------------------------------------------------------------
+  // Users 
   async listUsers(filters: ListUsersFilters): Promise<AdminUser[]> {
     // axios serializes `params` into the query string and omits undefined keys
     const res = await axiosInstance.get<AdminUser[]>("/admin/users", {
@@ -51,7 +51,7 @@ export const adminService = {
     return res.data;
   },
 
-  // --- Classes -------------------------------------------------------------
+  //  Classes 
   async listClasses(): Promise<ClassOut[]> {
     const res = await axiosInstance.get<ClassOut[]>("/admin/classes");
     return res.data;
