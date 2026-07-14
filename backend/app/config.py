@@ -38,7 +38,7 @@ class Settings(BaseSettings):
         cross-site. None REQUIRES Secure=True, which we have over HTTPS.
         Locally we stay on Lax (same-site, more CSRF-resistant).
         """
-        return "none" if self.IS_PRODUCTION else "lax"
+        return "none" if self.IS_PRODUCTION else "none"
 
     model_config = SettingsConfigDict(env_file=".env")
 
