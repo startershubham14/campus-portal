@@ -6,9 +6,9 @@
 
 Sign in with either account below to explore the two main roles:
 
-| Role | Email | Password |
-|------|-------|----------|
-| **Faculty** | `meena.joshi@college.edu.in` | `meena.joshi` |
+| Role        | Email                        | Password         |
+|-------------|------------------------------|------------------|
+| **Faculty** | `meena.joshi@college.edu.in` | `meena.joshi`    |
 | **Student** | `omkar.jadhav02@example.com` | `omkar.jadhav02` |
 
 > Shared demo accounts — data may be modified by other visitors. There is no public
