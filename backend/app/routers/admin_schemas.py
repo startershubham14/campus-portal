@@ -1,7 +1,6 @@
 import uuid
 from typing import Optional, Literal
-from pydantic import BaseModel, EmailStr
-
+from pydantic import BaseModel, EmailStr, Field
 # i added Out in naming to show these schemas are Response schemas i.e. what the API sends back
 class StudentProfileOut(BaseModel):
   enrollment_no:str
@@ -39,10 +38,9 @@ class StatsResponse(BaseModel):
 # Request schemas - what the API receives on request like post.
 
 class UpdateUser(BaseModel):
-  full_name:Optional[str]=None
-  department:Optional[str]=None
+  full_name:Optional[str]=Field(default=None, max_length=100)
+  department:Optional[str]=Field(default=None, max_length=100)
   current_semester: Optional[int] = None
-
 
 # Class management schemas
 
@@ -78,7 +76,7 @@ class ClassDetailOut(BaseModel):
     students: list[StudentInClass]
 
 class CreateClassRequest(BaseModel):
-    code: str
-    name: str
-    department: str
-    semester: int
+    code: str = Field(min_length=1, max_length=20)
+    name: str = Field(min_length=1, max_length=150)
+    department: str = Field(min_length=1, max_length=100)
+    semester: int = Field(ge=1, le=12)

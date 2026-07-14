@@ -2,8 +2,7 @@
 
 import uuid
 from typing import Optional, Literal
-from pydantic import BaseModel
-
+from pydantic import BaseModel, Field
 
 class FacultyProfileOut(BaseModel):
     id: uuid.UUID
@@ -60,34 +59,30 @@ class CourseDetailOut(BaseModel):
 
 
 class UploadMaterialRequest(BaseModel):
-    title: str
-    # S3 object key from the presign step. The confirm endpoint turns this
-    # into a presigned GET URL stored as file_url.
-    object_key: str
+    title: str = Field(min_length=1, max_length=200)
+    object_key: str = Field(min_length=1, max_length=500)
 
 
 class LinkMaterialRequest(BaseModel):
-    title: str
-    # External URL (Google Drive, YouTube, etc). Stored as-is -
-    # no S3, no presigned URL regeneration.
-    url: str
+    title: str = Field(min_length=1, max_length=200)
+    url: str = Field(min_length=1, max_length=2000)
 
 
 class CreateAssignmentRequest(BaseModel):
-    title: str
-    description: Optional[str] = None
-    due_date: str   
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=5000)
+    due_date: str = Field(min_length=1, max_length=30)
 
 
 class GradeSubmissionRequest(BaseModel):
-    marks_awarded: float
-    feedback: Optional[str] = None
+    marks_awarded: float = Field(ge=0, le=1000)
+    feedback: Optional[str] = Field(default=None, max_length=2000)
 
 
 class PresignRequest(BaseModel):
-    filename: str        # e.g. "week1-notes.pdf"
-    content_type: str    # e.g. "application/pdf"
-    class_code: str      # used as the S3 folder prefix e.g. "csc801"
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=100)
+    class_code: str = Field(min_length=1, max_length=20)
 
 class PresignResponse(BaseModel):
     presigned_url: str   # browser PUTs file here directly
@@ -114,8 +109,9 @@ class AttendanceMark(BaseModel):
 
 
 class SaveAttendanceRequest(BaseModel):
-    date: str               
-    marks: list[AttendanceMark]
+    date: str = Field(min_length=1, max_length=30)
+    marks: list[AttendanceMark] = Field(max_length=1000)
+
 
 class StudentAttendanceStat(BaseModel):
     student_id: uuid.UUID

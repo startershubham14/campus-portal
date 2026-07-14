@@ -3,8 +3,7 @@ Pydantic schemas for the student API.
 """
 import uuid
 from typing import Optional, Literal
-from pydantic import BaseModel
-
+from pydantic import BaseModel, Field
 
 class StudentProfileOut(BaseModel):
     id: uuid.UUID
@@ -44,8 +43,8 @@ class AssignmentOut(BaseModel):
 
 
 class SubmissionPresignRequest(BaseModel):
-    filename: str        # e.g. "assignment3.pdf"
-    content_type: str    # e.g. "application/pdf"
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=1, max_length=100)
 
 
 class SubmissionPresignResponse(BaseModel):
@@ -54,7 +53,7 @@ class SubmissionPresignResponse(BaseModel):
 
 
 class ConfirmSubmissionRequest(BaseModel):
-    object_key: str    
+    object_key: str = Field(min_length=1, max_length=500)
 
 
 class CourseDetailOut(BaseModel):

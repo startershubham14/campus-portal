@@ -3,28 +3,26 @@ Pydantic schemas for the exams feature - shared by faculty and student routers.
 """
 import uuid
 from typing import Optional, Literal
-from pydantic import BaseModel
-
+from pydantic import BaseModel, Field
 
 
 # Requests (faculty)
 
-
 class CreateExamRequest(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=200)
     exam_type: Literal["quiz", "midterm", "final", "assignment"]
-    max_marks: float
-    exam_date: str   # ISO "YYYY-MM-DD"
+    max_marks: float = Field(gt=0, le=1000)
+    exam_date: str = Field(min_length=1, max_length=30)
 
 
 class ResultEntry(BaseModel):
     student_id: uuid.UUID
-    marks_obtained: float
-    remarks: Optional[str] = None
+    marks_obtained: float = Field(ge=0, le=1000)
+    remarks: Optional[str] = Field(default=None, max_length=1000)
 
 
 class SaveResultsRequest(BaseModel):
-    results: list[ResultEntry]
+    results: list[ResultEntry] = Field(max_length=1000)
 
 
 # Responses (faculty)
