@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
 from app.database.connection import engine, Base
 from app.database import models  
 from app.auth.router import router as auth_router
@@ -26,18 +27,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS (Cross-Origin Resource Sharing)
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
+# CORS origins come from settings (env-driven), so production can allow the
+# Vercel URL without a code change. allow_credentials=True is required for
+# the auth cookie to be sent cross-origin.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE","PATCH"], # Allows all HTTP methods (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["Authorization", "Content-Type"], 
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(SlowAPIMiddleware)
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
