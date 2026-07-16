@@ -1,5 +1,6 @@
-import logo from "../assets/logo.png";
 import { Link } from "react-router-dom";
+import SiteHeader from "../components/SiteHeader";
+import SiteFooter from "../components/SiteFooter";
 import { useState } from "react";
 import carousol_image1 from "../assets/carousol_image1.jpeg";
 import carousol_image2 from "../assets/carousol_image2.jpeg";
@@ -8,110 +9,23 @@ import carousol_image4 from "../assets/carousol_image4.jpeg";
 import { GoChevronLeft } from "react-icons/go";
 import { GoChevronRight } from "react-icons/go";
 import { FaUserGraduate, FaChalkboardTeacher, FaBuilding, FaBriefcase } from "react-icons/fa";
-import { FaFacebook, FaInstagram, FaTwitter, FaLinkedin } from "react-icons/fa";
-import { HiOutlineMailOpen, HiOutlinePhone, HiOutlineLocationMarker } from "react-icons/hi";
 import { FaQuoteLeft } from "react-icons/fa";
 
 export default function Landing() {
   return (
     <>
-      <header>
-        <TopBar />
-        <NavBar />
+      <SiteHeader />
+      <main>
         <HeroSection />
         <StatBar />
         <Testimonials />
-        <Footer/>
-      </header>
+      </main>
+      <SiteFooter />
     </>
   );
 }
 //<NavBar/>
-function TopBar() {
-  return (
-    <>
-      <div
-        id="top-bar"
-        className="flex justify-between items-center w-full px-6 py-2 bg-gray-50 
-        border-b border-gray-200 text-xs font-medium text-green-600"
-      >
-        <div>
-          <a
-            href="#"
-            className="hover:text-green-800 transition-colors duration-200"
-          >
-            Admissions Open
-          </a>
-        </div>
 
-        <div className="flex items-center space-x-6">
-          <a
-            href="#"
-            className="hover:text-green-800 transition-colors duration-200"
-          >
-            Helpline
-          </a>
-          
-        </div>
-      </div>
-    </>
-  );
-}
-
-function NavBar() {
-  return (
-    <div
-      id="nav"
-      className="flex justify-between items-center w-full px-9 py-4 bg-indigo-950 border-b border-indigo-900"
-    >
-      <Link to="/">
-        <div id="logo-on-NavBar" className="bg-white p-1 rounded">
-          <img src={logo} alt="logo" className="w-12 h-12 object-contain" />
-        </div>
-      </Link>
-      
-      <nav className="flex items-center gap-8 text-white text-lg font-medium">
-        <Link
-          to="/about"
-          className="hover:text-indigo-300 transition-colors duration-200"
-        >
-          About
-        </Link>
-        <Link
-          to="/admissions"
-          className="hover:text-indigo-300 transition-colors duration-200"
-        >
-          Admissions
-        </Link>
-        <Link
-          to="/campus-life"
-          className="hover:text-indigo-300 transition-colors duration-200"
-        >
-          Campus Life
-        </Link>
-        <Link
-          to="/placements"
-          className="hover:text-indigo-300 transition-colors duration-200"
-        >
-          Placements
-        </Link>
-        <Link
-          to="/contact"
-          className="whitespace-nowrap hover:text-indigo-300 transition-colors duration-200"
-        >
-          Contact Us
-        </Link>
-        <Link
-            to="/login"
-            className="bg-white text-black px-3 py-1.5 rounded-md hover:bg-blue-300
-            transition-colors duration-200"
-          >
-            Portal Login
-          </Link>
-      </nav>
-    </div>
-  );
-}
 
 
 function HeroSection() {
@@ -292,89 +206,5 @@ const Testimonials = () => {
         </div>
       </div>
     </div>
-  );
-};
-
-const Footer = () => {
-  return (
-    <footer className="bg-indigo-950 text-indigo-200">
-      <div className="w-7/10 m-auto py-12 grid grid-cols-1 md:grid-cols-4 gap-8">
-        <div>
-          <div className="bg-white p-1 rounded w-fit mb-4">
-            <img src={logo} alt="logo" className="w-12 h-12 object-contain" />
-          </div>
-          <p className="text-sm">
-            Greenfield Institute of Technology has been empowering students
-            with quality education and industry-ready skills since 1998.
-          </p>
-        </div>
-
-        <div>
-          <h3 className="text-white font-semibold mb-4">Quick Links</h3>
-          <ul className="space-y-2 text-sm">
-            <li>
-              <Link to="/about" className="hover:text-white transition-colors duration-200">
-                About Us
-              </Link>
-            </li>
-            <li>
-              <Link to="/admissions" className="hover:text-white transition-colors duration-200">
-                Admissions
-              </Link>
-            </li>
-            <li>
-              <Link to="/campus-life" className="hover:text-white transition-colors duration-200">
-                Campus Life
-              </Link>
-            </li>
-            <li>
-              <Link to="/placements" className="hover:text-white transition-colors duration-200">
-                Placements
-              </Link>
-            </li>
-          </ul>
-        </div>
-
-        <div>
-          <h3 className="text-white font-semibold mb-4">Contact</h3>
-          <ul className="space-y-3 text-sm">
-            <li className="flex items-center gap-2">
-              <HiOutlineLocationMarker className="text-lg shrink-0" />
-              123 University Road, Greenfield, IN 411001
-            </li>
-            <li className="flex items-center gap-2">
-              <HiOutlinePhone className="text-lg shrink-0" />
-              +91 98765 43210
-            </li>
-            <li className="flex items-center gap-2">
-              <HiOutlineMailOpen className="text-lg shrink-0" />
-              info@greenfieldtech.edu
-            </li>
-          </ul>
-        </div>
-
-        <div>
-          <h3 className="text-white font-semibold mb-4">Follow Us</h3>
-          <div className="flex gap-4 text-2xl">
-            <a href="#" className="hover:text-white transition-colors duration-200">
-              <FaFacebook />
-            </a>
-            <a href="#" className="hover:text-white transition-colors duration-200">
-              <FaInstagram />
-            </a>
-            <a href="#" className="hover:text-white transition-colors duration-200">
-              <FaTwitter />
-            </a>
-            <a href="#" className="hover:text-white transition-colors duration-200">
-              <FaLinkedin />
-            </a>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-indigo-900 py-4 text-center text-xs">
-        © {new Date().getFullYear()} Greenfield Institute of Technology. All rights reserved.
-      </div>
-    </footer>
   );
 };
