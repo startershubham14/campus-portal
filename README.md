@@ -194,7 +194,7 @@ Security was treated as a first-class concern rather than an afterthought:
 
 ## Decisions taken while building
 
-**keep login for diffrent types users unified** we never let user select the type of user portal they will log in , it will be only dependent on type of user they are backend checks type of account it is . whether it is student account, teacher account, 
+**keep login for diffrent types users unified** we never let user select the type of user portal they will log in , it will be only dependent on type of user they are backend checks type of account it is . whether it is student account, teacher account, admin account respectively.
 
 **Presigned URLs over server-proxied uploads.** The backend never handles file bytes - it signs a URL and the browser talks to S3 directly. This keeps the API stateless and cheap, and sidesteps request-size limits. Stored view URLs are regenerated on each read since presigned GETs expire.
 
