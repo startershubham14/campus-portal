@@ -10,10 +10,10 @@ Built with **FastAPI** (async Python) and **React + TypeScript**, backed by **Po
 
 Sign in with either account below to explore the two main roles:
 
-| Role | Email | Password |
-|------|-------|----------|
-| **Faculty** | `meena.joshi@college.edu.in` | `meena.joshi` |
-| **Student** | `omkar.jadhav02@example.com` | `omkar.jadhav02` |
+|    Role     |             Email            | Password          |
+|-------------|------------------------------|-------------------|
+| **Faculty** | `meena.joshi@college.edu.in` | `meena.joshi`     |
+| **Student** | `omkar.jadhav02@example.com` | `omkar.jadhav02`  |
 
 > Shared demo accounts — data may be modified by other visitors. There is no public
 > sign-up by design: all accounts are created by an admin.
@@ -24,12 +24,12 @@ Sign in with either account below to explore the two main roles:
 
 ### Deployment architecture
 
-| Layer | Hosted on |
-|-------|-----------|
-| Frontend | Vercel |
-| Backend API | AWS EC2 (nginx → gunicorn/uvicorn), HTTPS via Let's Encrypt |
-| Database | AWS RDS (PostgreSQL) |
-| File storage | AWS S3 (direct browser uploads via presigned URLs) |
+| Layer        | Hosted on                                                   |
+|--------------|-------------------------------------------------------------|
+| Frontend     | Vercel                                                      |
+| Backend API  | AWS EC2 (nginx → gunicorn/uvicorn), HTTPS via Let's Encrypt |
+| Database     | AWS RDS (PostgreSQL)                                        |
+| File storage | AWS S3 (direct browser uploads via presigned URLs)          |
 
 ---
 
@@ -192,37 +192,15 @@ Security was treated as a first-class concern rather than an afterthought:
 
 ---
 
+## Decisions taken while building
 
-## API Overview
-
-Roughly 45 endpoints across four routers. A selection:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/auth/login` | Authenticate, sets httpOnly cookie |
-| `GET`  | `/auth/me` | Verify session, return current user |
-| `POST` | `/admin/users` | Create a user (admin only) |
-| `POST` | `/admin/classes/{id}/students/{uid}` | Enroll a student |
-| `POST` | `/faculty/courses/{id}/materials/presign` | Get S3 upload URL |
-| `POST` | `/faculty/courses/{id}/exams` | Create an exam |
-| `GET`  | `/faculty/courses/{id}/attendance/summary` | Class attendance analytics |
-| `POST` | `/student/assignments/{id}/submit/confirm` | Confirm a submission |
-| `GET`  | `/student/attendance/summary` | Per-subject attendance vs 75% rule |
-| `GET`  | `/student/results` | Exam results with class rank |
-
-Full interactive documentation is auto-generated at `/docs`.
-
----
-
-## Notable Engineering Decisions
+**keep login for diffrent types users unified** we never let user select the type of user portal they will log in , it will be only dependent on type of user they are backend checks type of account it is . whether it is student account, teacher account, 
 
 **Presigned URLs over server-proxied uploads.** The backend never handles file bytes - it signs a URL and the browser talks to S3 directly. This keeps the API stateless and cheap, and sidesteps request-size limits. Stored view URLs are regenerated on each read since presigned GETs expire.
 
 **Attendance denominator = sessions held, not calendar days.** A "session" exists only when attendance was actually taken, so holidays and un-held classes never dilute the percentage. This avoids building a separate holiday-calendar feature while keeping the 75% math honest.
 
 **Normalized exams/results schema.** Exams and results live in separate tables, enabling aggregation across either axis - class performance per exam, or one student's trend across exams - which a flat grades table can't express cleanly.
-
-**Migrations, not `create_all`.** Schema is managed exclusively through Alembic, so changes are versioned and reversible rather than silently applied at startup.
 
 **Business logic on the server.** Computed values like attendance status, "classes you can miss," pass/fail counts, and class rank are calculated in the API and sent to the frontend as ready-to-render data - keeping the logic testable and the UI thin.
 
